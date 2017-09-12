@@ -55,7 +55,7 @@ func NewNodeWatcher(client kubernetes.Interface, fc firmament.FirmamentScheduler
 			},
 		},
 		&v1.Node{},
-		0,
+		(1 * time.Microsecond),
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				key, err := cache.MetaNamespaceKeyFunc(obj)
@@ -129,7 +129,7 @@ func (this *NodeWatcher) enqueueNodeAddition(key, obj interface{}) {
 	}
 	addedNode := this.parseNode(node, NodeAdded)
 	this.nodeWorkQueue.Add(key, addedNode)
-	glog.Info("enqueueNodeAdition: Added node ", addedNode.Hostname)
+	//glog.Info("enqueueNodeAdition: Added node ", addedNode.Hostname)
 }
 
 func (this *NodeWatcher) enqueueNodeUpdate(key, oldObj, newObj interface{}) {
@@ -140,13 +140,13 @@ func (this *NodeWatcher) enqueueNodeUpdate(key, oldObj, newObj interface{}) {
 		if oldNode.Spec.Unschedulable {
 			addedNode := this.parseNode(newNode, NodeAdded)
 			this.nodeWorkQueue.Add(key, addedNode)
-			glog.Info("enqueueNodeUpdate: Added node ", addedNode.Hostname)
+			//glog.Info("enqueueNodeUpdate: Added node ", addedNode.Hostname)
 			return
 		} else {
 			// Can not schedule pods on the node any more.
 			deletedNode := this.parseNode(newNode, NodeDeleted)
 			this.nodeWorkQueue.Add(key, deletedNode)
-			glog.Info("enqueueNodeUpdate: Deleted node ", deletedNode.Hostname)
+			//glog.Info("enqueueNodeUpdate: Deleted node ", deletedNode.Hostname)
 			return
 		}
 	}
@@ -157,12 +157,12 @@ func (this *NodeWatcher) enqueueNodeUpdate(key, oldObj, newObj interface{}) {
 		if newIsReady && !newIsOutOfDisk {
 			addedNode := this.parseNode(newNode, NodeAdded)
 			this.nodeWorkQueue.Add(key, addedNode)
-			glog.Info("enqueueNodeUpdate: Added node ", addedNode.Hostname)
+			//glog.Info("enqueueNodeUpdate: Added node ", addedNode.Hostname)
 			return
 		} else {
 			failedNode := this.parseNode(newNode, NodeFailed)
 			this.nodeWorkQueue.Add(key, failedNode)
-			glog.Info("enqueueNodeUpdate: Failed node ", failedNode.Hostname)
+			//glog.Info("enqueueNodeUpdate: Failed node ", failedNode.Hostname)
 			return
 		}
 	}
@@ -219,7 +219,6 @@ func (this *NodeWatcher) Run(stopCh <-chan struct{}, nWorkers int) {
 }
 
 func (this *NodeWatcher) nodeWorker() {
-	for {
 		func() {
 			key, items, quit := this.nodeWorkQueue.Get()
 			if quit {
@@ -280,7 +279,6 @@ func (this *NodeWatcher) nodeWorker() {
 			}
 			defer this.nodeWorkQueue.Done(key)
 		}()
-	}
 }
 
 func (this *NodeWatcher) cleanResourceStateForNode(rtnd *firmament.ResourceTopologyNodeDescriptor) {

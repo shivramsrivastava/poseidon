@@ -3,14 +3,15 @@ kind: Job
 metadata:
   name: cpuspin5
 spec:
-  completions: 1000
-  parallelism: 1000
+  completions: 3800
+  parallelism: 3800
   template:
     metadata:
       name: cpuspin5
       labels:
-        scheduler: poseidon
+        schedulerName: poseidon
     spec:
+      schedulerName: poseidon
       containers:
       - name: cpuspin
         image: firmament/libhdfs3

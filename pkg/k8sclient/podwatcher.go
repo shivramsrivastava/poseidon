@@ -19,7 +19,7 @@
 package k8sclient
 
 import (
-	"encoding/json"
+	//"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -30,7 +30,6 @@ import (
 	"github.com/camsas/poseidon/pkg/firmament"
 	"github.com/golang/glog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -40,6 +39,9 @@ import (
 	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/tools/cache"
 )
+
+var globalPodworkerPedstat time.Duration
+var globalPodAdditionTime time.Duration
 
 type NodeSelectors map[string]string
 
@@ -61,8 +63,10 @@ func SortNodeSelectors(nodeSelector NodeSelectors) NodeSelectors {
 }
 
 func NewPodWatcher(kubeVerMajor, kubeVerMinor int, schedulerName string, client kubernetes.Interface, fc firmament.FirmamentSchedulerClient) *PodWatcher {
+	globalPodAdditionTime = 0
 	glog.Info("Starting PodWatcher...")
-	PodsCond = sync.NewCond(&sync.Mutex{})
+	PodsCond = &sync.Mutex{}
+	//PodsCond = sync.NewCond(&sync.Mutex{})
 	PodToTD = make(map[PodIdentifier]*firmament.TaskDescriptor)
 	TaskIDToPod = make(map[uint64]PodIdentifier)
 	jobIDToJD = make(map[string]*firmament.JobDescriptor)
@@ -71,14 +75,28 @@ func NewPodWatcher(kubeVerMajor, kubeVerMinor int, schedulerName string, client 
 		clientset: client,
 		fc:        fc,
 	}
-	schedulerSelector := fields.Everything()
-	podSelector := labels.Everything()
+	/*podWatcher.podFCQueue = NewKeyedQueue()
+	for key,value := range fc{
+		podWatcher.podFCQueue.Add(key,value)
+	}*/
+	//PushRateLimit: flowcontrol.NewTokenBucketRateLimiter(100,100),
+	schedulerSelector := labels.Everything()
+	var err error
 	if kubeVerMajor >= 1 && kubeVerMinor >= 6 {
-		// schedulerName is only available in Kubernetes >= 1.6.
-		schedulerSelector = fields.ParseSelectorOrDie("spec.schedulerName==" + schedulerName)
+		// TODO:(shiv)
+		// Please refer issue : https://github.com/kubernetes/kubernetes/issues/49190
+		// schedulerName support which is available in Kubernetes >= 1.6 is broken.
+		// The current workaround to this issue is to assign a mandatory label as mentioned below to all the object
+		// ( like pods/deployments/job etc) that are to be scheduled by poseidon.
+		// label:
+		//  schedulerName: poseidon
+		schedulerSelector, err = labels.Parse("schedulerName==" + schedulerName)
+		if err != nil {
+			glog.Fatal("Failed to parse scheduler label selector")
+		}
 	} else {
 		var err error
-		podSelector, err = labels.Parse("scheduler in (" + schedulerName + ")")
+		schedulerSelector, err = labels.Parse("scheduler in (" + schedulerName + ")")
 		if err != nil {
 			glog.Fatal("Failed to parse scheduler label selector")
 		}
@@ -86,18 +104,16 @@ func NewPodWatcher(kubeVerMajor, kubeVerMinor int, schedulerName string, client 
 	_, controller := cache.NewInformer(
 		&cache.ListWatch{
 			ListFunc: func(alo metav1.ListOptions) (runtime.Object, error) {
-				alo.FieldSelector = schedulerSelector.String()
-				alo.LabelSelector = podSelector.String()
+				alo.LabelSelector = schedulerSelector.String()
 				return client.CoreV1().Pods("").List(alo)
 			},
 			WatchFunc: func(alo metav1.ListOptions) (watch.Interface, error) {
-				alo.FieldSelector = schedulerSelector.String()
-				alo.LabelSelector = podSelector.String()
+				alo.LabelSelector = schedulerSelector.String()
 				return client.CoreV1().Pods("").Watch(alo)
 			},
 		},
 		&v1.Pod{},
-		0,
+		time.Millisecond, //(time.Second * 10) ,//(1 * time.Millisecond),
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				key, err := cache.MetaNamespaceKeyFunc(obj)
@@ -169,11 +185,22 @@ func (this *PodWatcher) parsePod(pod *v1.Pod) *Pod {
 	}
 }
 
+var enqueAddTime time.Duration
+
 func (this *PodWatcher) enqueuePodAddition(key interface{}, obj interface{}) {
+	startTime := time.Now()
+	//startTime:= time.Now()
 	pod := obj.(*v1.Pod)
 	addedPod := this.parsePod(pod)
 	this.podWorkQueue.Add(key, addedPod)
-	glog.Info("enqueuePodAddition: Added pod ", addedPod.Identifier)
+	//glog.Info(" Pod queue addtition after parsing ", time.Since(startTime))
+	//glog.Info("enqueuePodAddition: Added pod ", addedPod.Identifier)
+	sinceTime := time.Now()
+	//glog.Info(" Benchmark: Time taken for enqueuePodAddition: ", sinceTime.Sub(startTime), " Start:", startTime, " End:", sinceTime)
+	globalPodAdditionTime = globalPodAdditionTime + sinceTime.Sub(startTime)
+	//glog.Info(" Benchmark: 1) Overall Time taken for enqueuePodAddition: ", globalPodAdditionTime)
+	//glog.Info("enqueuePodAddition: Added pod ", addedPod.Identifier)
+
 }
 
 func (this *PodWatcher) enqueuePodDeletion(key interface{}, obj interface{}) {
@@ -189,7 +216,7 @@ func (this *PodWatcher) enqueuePodDeletion(key interface{}, obj interface{}) {
 			OwnerRef: GetOwnerReference(pod),
 		}
 		this.podWorkQueue.Add(key, deletedPod)
-		glog.Info("enqueuePodDeletion: Added pod ", deletedPod.Identifier)
+		//glog.Info("enqueuePodDeletion: Added pod ", deletedPod.Identifier)
 	}
 }
 
@@ -197,10 +224,13 @@ func (this *PodWatcher) enqueuePodUpdate(key, oldObj, newObj interface{}) {
 	oldPod := oldObj.(*v1.Pod)
 	newPod := newObj.(*v1.Pod)
 	if oldPod.Status.Phase != newPod.Status.Phase {
+		if newPod.Status.Phase == "Running" {
+			return
+		}
 		// TODO(ionel): This code assumes that if other fields changed as well then Firmament will automatically update them upon state transition. This is currently not true.
 		updatedPod := this.parsePod(newPod)
 		this.podWorkQueue.Add(key, updatedPod)
-		glog.Infof("enqueuePodUpdate: Updated pod state change %v %s", updatedPod.Identifier, updatedPod.State)
+		//glog.Infof("enqueuePodUpdate: Updated pod state change %v %s", updatedPod.Identifier, updatedPod.State)
 		return
 	}
 	oldCpuReq, oldMemReq := this.getCpuMemRequest(oldPod)
@@ -211,12 +241,13 @@ func (this *PodWatcher) enqueuePodUpdate(key, oldObj, newObj interface{}) {
 		!reflect.DeepEqual(oldPod.Spec.NodeSelector, newPod.Spec.NodeSelector) {
 		updatedPod := this.parsePod(newPod)
 		this.podWorkQueue.Add(key, updatedPod)
-		glog.Info("enqueuePodUpdate: Updated pod ", updatedPod.Identifier)
+		//glog.Info("enqueuePodUpdate: Updated pod ", updatedPod.Identifier)
 		return
 	}
 }
 
 func (this *PodWatcher) Run(stopCh <-chan struct{}, nWorkers int) {
+	globalPodworkerPedstat = 0
 	defer utilruntime.HandleCrash()
 
 	// The workers can stop when we are done.
@@ -232,8 +263,8 @@ func (this *PodWatcher) Run(stopCh <-chan struct{}, nWorkers int) {
 	}
 
 	glog.Info("Starting pod watching workers")
-	for i := 0; i < nWorkers; i++ {
-		go wait.Until(this.podWorker, time.Second, stopCh)
+	for i := 0; i < nWorkers; i++ { //nWorkers; i++ {
+		go wait.Until(this.podWorker, (time.Millisecond), stopCh)
 	}
 
 	<-stopCh
@@ -241,111 +272,167 @@ func (this *PodWatcher) Run(stopCh <-chan struct{}, nWorkers int) {
 }
 
 func (this *PodWatcher) podWorker() {
+        localfc, conn, err := firmament.New("0.0.0.0:9090")
+        defer conn.Close()
+        if err != nil {
+                glog.Info("firm clieet err", err)
+                panic(err)
+        }
+
 	for {
-		func() {
-			key, items, quit := this.podWorkQueue.Get()
-			if quit {
-				return
-			}
-			for _, item := range items {
-				pod := item.(*Pod)
-				switch pod.State {
-				case PodPending:
-					glog.V(2).Info("PodPending ", pod.Identifier)
-					PodsCond.L.Lock()
-					jobId := this.generateJobID(pod.OwnerRef)
-					jd, ok := jobIDToJD[jobId]
-					if !ok {
-						jd = this.createNewJob(pod.OwnerRef)
-						jobIDToJD[jobId] = jd
-						jobNumTasksToRemove[jobId] = 0
-					}
-					td := this.addTaskToJob(pod, jd)
-					jobNumTasksToRemove[jobId]++
+	func() {
+		/*totalTimeSingleRun:=time.Now()
+		connKey,coFc,quitConn:=this.podFCQueue.Get()
+
+		if quitConn{
+			glog.Fatalln("connection pool error")
+		}
+
+		connFC, ok :=coFc[0].(firmament.FirmamentSchedulerClient)
+		if !ok{
+			glog.Fatalln("type assetion failed", reflect.TypeOf(coFc), reflect.TypeOf(coFc[0]) )
+		}*/
+
+		//defer this.podFCQueue.Add(connKey,connFC)
+		//defer this.podFCQueue.Done(connKey)
+
+		key, items, quit := this.podWorkQueue.Get()
+		if quit {
+			//glog.Info(" quit called from Queue")
+			return
+		}
+		for _, item := range items {
+			pod := item.(*Pod)
+			switch pod.State {
+			case PodPending:
+				//totalPedginCaseTime := time.Now()
+				// glog.V(2).Info("PodPending ", pod.Identifier)
+				jobId := this.generateJobID(pod.OwnerRef)
+				PodsCond.Lock()
+				//glog.Info("Jod ID for this pod: ", jobId)
+				jd, ok := jobIDToJD[jobId]
+				if !ok {
+					glog.Info(" Benchmark: Timestamp at which 1st task is being submitted to firmament.")
+					jd = this.createNewJob(pod.OwnerRef, jobId)
+					jobIDToJD[jobId] = jd
+					// Jagadish: Changed below value from 0 to 1 because 1st task added.
+					td := this.addTaskToJob(pod, jd.Uuid, jd.Name, 0)
+					jobNumTasksToRemove[jobId] = 1
+					jd.RootTask = td
 					PodToTD[pod.Identifier] = td
-					TaskIDToPod[td.GetUid()] = pod.Identifier
-					taskDescription := &firmament.TaskDescription{
-						TaskDescriptor: td,
-						JobDescriptor:  jd,
+	                                TaskIDToPod[td.GetUid()] = pod.Identifier
+        	                        taskDescription := &firmament.TaskDescription{
+                                        TaskDescriptor: td,
+                                        JobDescriptor:  jd,
 					}
-					PodsCond.L.Unlock()
 					firmament.TaskSubmitted(this.fc, taskDescription)
-				case PodSucceeded:
-					glog.V(2).Info("PodSucceeded ", pod.Identifier)
-					PodsCond.L.Lock()
-					td, ok := PodToTD[pod.Identifier]
-					PodsCond.L.Unlock()
-					if !ok {
-						glog.Fatalf("Pod %v does not exist", pod.Identifier)
-					}
-					firmament.TaskCompleted(this.fc, &firmament.TaskUID{TaskUid: td.Uid})
-				case PodDeleted:
-					glog.V(2).Info("PodDeleted ", pod.Identifier)
-					PodsCond.L.Lock()
-					td, ok := PodToTD[pod.Identifier]
-					PodsCond.L.Unlock()
-					if !ok {
-						glog.Fatalf("Pod %s does not exist", pod.Identifier)
-					}
-					firmament.TaskRemoved(this.fc, &firmament.TaskUID{TaskUid: td.Uid})
-					PodsCond.L.Lock()
-					delete(PodToTD, pod.Identifier)
-					delete(TaskIDToPod, td.GetUid())
-					// TODO(ionel): Should we delete the task from JD's spawned field?
-					jobId := this.generateJobID(pod.OwnerRef)
-					jobNumTasksToRemove[jobId]--
-					if jobNumTasksToRemove[jobId] == 0 {
-						// Clean state because the job doesn't have any tasks left.
-						delete(jobNumTasksToRemove, jobId)
-						delete(jobIDToJD, jobId)
-					}
-					PodsCond.L.Unlock()
-				case PodFailed:
-					glog.V(2).Info("PodFailed ", pod.Identifier)
-					PodsCond.L.Lock()
-					td, ok := PodToTD[pod.Identifier]
-					PodsCond.L.Unlock()
-					if !ok {
-						glog.Fatalf("Pod %s does not exist", pod.Identifier)
-					}
-					firmament.TaskFailed(this.fc, &firmament.TaskUID{TaskUid: td.Uid})
-				case PodRunning:
-					glog.V(2).Info("PodRunning ", pod.Identifier)
-					// We don't have to do anything.
-				case PodUnknown:
-					glog.Errorf("Pod %s in unknown state", pod.Identifier)
-					// TODO(ionel): Handle Unknown case.
-				case PodUpdated:
-					glog.V(2).Info("PodUpdated ", pod.Identifier)
-					PodsCond.L.Lock()
-					jobId := this.generateJobID(pod.OwnerRef)
-					jd, okJob := jobIDToJD[jobId]
-					td, okPod := PodToTD[pod.Identifier]
-					PodsCond.L.Unlock()
-					if !okJob {
-						glog.Fatalf("Pod's %v job does not exist", pod.Identifier)
-					}
-					if !okPod {
-						glog.Fatalf("Pod %v does not exist", pod.Identifier)
-					}
-					this.updateTask(pod, td)
-					taskDescription := &firmament.TaskDescription{
-						TaskDescriptor: td,
-						JobDescriptor:  jd,
-					}
-					firmament.TaskUpdated(this.fc, taskDescription)
-				default:
-					glog.Fatalf("Pod %v in unexpected state %v", pod.Identifier, pod.State)
+					PodsCond.Unlock()
+					continue
+                                }
+				jobNumTasksToRemove[jobId]++
+				localcnt:=jobNumTasksToRemove[jobId]
+                                PodsCond.Unlock()
+				td := this.addTaskToJob(pod, jd.Uuid, jd.Name, (localcnt))
+				PodsCond.Lock()
+				PodToTD[pod.Identifier] = td
+				TaskIDToPod[td.GetUid()] = pod.Identifier
+				taskDescription := &firmament.TaskDescription{
+					TaskDescriptor: td,
+					JobDescriptor:  jd,
 				}
+				PodsCond.Unlock()
+				go firmament.TaskSubmitted(this.fc, taskDescription)
+				if localcnt >= 3800 {
+					glog.Info(" Benchmark: 1) Overall Time taken for enqueuePodAddition: ", globalPodAdditionTime)
+					glog.Info(" Benchmark: 2) Timestamp at which we submitted all tasks for job: ", localcnt, jobId)
+				}
+				// glog.Info("Jod ID for this pod: ", jobId)
+				//PodsCond.L.Unlock()
+				//sinceTime := time.Now()
+				//glog.Info("Benchmark: Time spent in getting pending pods and sending them to firmament: ",
+				//	sinceTime.Sub(totalPedginCaseTime), " Start:", totalPedginCaseTime, " End:", sinceTime)
+				//PodsCond.L.Lock()
+				//globalPodworkerPedstat=globalPodworkerPedstat+sinceTime
+				//glog.Info("Benchmark: 2) Overall Time spent in getting pending pods and sending them to firmament: ", globalPodworkerPedstat)
+				//PodsCond.L.Unlock()
+			case PodSucceeded:
+				glog.V(2).Info("PodSucceeded ", pod.Identifier)
+				PodsCond.Lock()
+				td, ok := PodToTD[pod.Identifier]
+				PodsCond.Unlock()
+				if !ok {
+					glog.Fatalf("Pod %v does not exist", pod.Identifier)
+				}
+				firmament.TaskCompleted(localfc, &firmament.TaskUID{TaskUid: td.Uid})
+			case PodDeleted:
+				glog.Info("PodDeleted ", pod.Identifier)
+				PodsCond.Lock()
+				td, ok := PodToTD[pod.Identifier]
+				PodsCond.Unlock()
+				if !ok {
+					glog.Fatalf("Pod %s does not exist", pod.Identifier)
+				}
+				firmament.TaskRemoved(this.fc, &firmament.TaskUID{TaskUid: td.Uid})
+				PodsCond.Lock()
+				delete(PodToTD, pod.Identifier)
+				delete(TaskIDToPod, td.GetUid())
+				// TODO(ionel): Should we delete the task from JD's spawned field?
+				jobId := this.generateJobID(pod.OwnerRef)
+				jobNumTasksToRemove[jobId]--
+				if jobNumTasksToRemove[jobId] == 0 {
+					// Clean state because the job doesn't have any tasks left.
+					delete(jobNumTasksToRemove, jobId)
+					delete(jobIDToJD, jobId)
+				}
+				PodsCond.Unlock()
+			case PodFailed:
+				glog.V(2).Info("PodFailed ", pod.Identifier)
+				PodsCond.Lock()
+				td, ok := PodToTD[pod.Identifier]
+				PodsCond.Unlock()
+				if !ok {
+					glog.Fatalf("Pod %s does not exist", pod.Identifier)
+				}
+				firmament.TaskFailed(this.fc, &firmament.TaskUID{TaskUid: td.Uid})
+			case PodRunning:
+				glog.V(2).Info("PodRunning ", pod.Identifier)
+				// We don't have to do anything.
+			case PodUnknown:
+				glog.Errorf("Pod %s in unknown state", pod.Identifier)
+				// TODO(ionel): Handle Unknown case.
+			case PodUpdated:
+				glog.V(2).Info("PodUpdated ", pod.Identifier)
+				PodsCond.Lock()
+				jobId := this.generateJobID(pod.OwnerRef)
+				jd, okJob := jobIDToJD[jobId]
+				td, okPod := PodToTD[pod.Identifier]
+				PodsCond.Unlock()
+				if !okJob {
+					glog.Fatalf("Pod's %v job does not exist", pod.Identifier)
+				}
+				if !okPod {
+					glog.Fatalf("Pod %v does not exist", pod.Identifier)
+				}
+				this.updateTask(pod, td)
+				taskDescription := &firmament.TaskDescription{
+					TaskDescriptor: td,
+					JobDescriptor:  jd,
+				}
+				firmament.TaskUpdated(this.fc, taskDescription)
+			default:
+				glog.Fatalf("Pod %v in unexpected state %v", pod.Identifier, pod.State)
 			}
-			defer this.podWorkQueue.Done(key)
-		}()
+		}
+		defer this.podWorkQueue.Done(key)
+		//time.Since(totalTimeSingleRun)
+		//glog.Info("total time taken for processing all the queue by worker id",time.Since(totalTimeSingleRun))
+	}()
 	}
 }
 
-func (this *PodWatcher) createNewJob(jobName string) *firmament.JobDescriptor {
+func (this *PodWatcher) createNewJob(jobName string, jobID string) *firmament.JobDescriptor {
 	jobDesc := &firmament.JobDescriptor{
-		Uuid:  this.generateJobID(jobName),
+		Uuid:  jobID,
 		Name:  jobName,
 		State: firmament.JobDescriptor_CREATED,
 	}
@@ -367,11 +454,11 @@ func (this *PodWatcher) updateTask(pod *Pod, td *firmament.TaskDescriptor) {
 	}
 }
 
-func (this *PodWatcher) addTaskToJob(pod *Pod, jd *firmament.JobDescriptor) *firmament.TaskDescriptor {
+func (this *PodWatcher) addTaskToJob(pod *Pod, jdUid string, jdName string, tdID int) *firmament.TaskDescriptor {
 	task := &firmament.TaskDescriptor{
 		Name:  pod.Identifier.UniqueName(),
 		State: firmament.TaskDescriptor_CREATED,
-		JobId: jd.Uuid,
+		JobId: jdUid,
 		ResourceRequest: &firmament.ResourceVector{
 			// TODO(ionel): Update types so no cast is required.
 			CpuCores: float32(pod.CpuRequest),
@@ -391,14 +478,24 @@ func (this *PodWatcher) addTaskToJob(pod *Pod, jd *firmament.JobDescriptor) *fir
 	setTaskNetworkRequirement(task, pod.Labels)
 	task.LabelSelectors = this.getFirmamentLabelSelectorFromNodeSelectorMap(SortNodeSelectors(pod.NodeSelector))
 	setTaskType(task)
-
-	if jd.RootTask == nil {
-		task.Uid = this.generateTaskID(jd.Name, 0)
+	//PodsCond.L.Lock()
+	//
+	/*jd, ok := jobIDToJD[jobId]
+	if !ok{
+			glog.Fatalln("Job can be nil here")
+	}
+	task.JobId=jd.Uuid*/
+	task.Uid = this.generateTaskID(jdName, tdID)
+	/*if jd.RootTask == nil {
+		task.Uid = this.generateTaskID(jdName, tdID)
 		jd.RootTask = task
+		//glog.Info("First Task UID ",task.Uid, " for pod ", task.Name)
 	} else {
 		task.Uid = this.generateTaskID(jd.Name, len(jd.RootTask.Spawned)+1)
 		jd.RootTask.Spawned = append(jd.RootTask.Spawned, task)
-	}
+		//glog.Info("Spawned UID ",task.Uid," for pod ", task.Name)
+	}*/
+	//PodsCond.L.Unlock()
 	return task
 }
 
@@ -416,8 +513,10 @@ func (this *PodWatcher) generateTaskID(jdUid string, taskNum int) uint64 {
 
 // GetOwnerReference to get the parent object reference
 func GetOwnerReference(pod *v1.Pod) string {
+
+	return "2dc9ca12-193d-4290-8dc6-feafa38ac6b4"
 	// Return if owner reference exists.
-	ownerRefs := pod.GetObjectMeta().GetOwnerReferences()
+	/*ownerRefs := pod.GetObjectMeta().GetOwnerReferences()
 	if len(ownerRefs) != 0 {
 		for x := range ownerRefs {
 			ref := &ownerRefs[x]
@@ -442,7 +541,7 @@ func GetOwnerReference(pod *v1.Pod) string {
 	}
 
 	// Return the uid of the ObjectMeta if none from the above is present.
-	return string(pod.GetObjectMeta().GetUID())
+	return string(pod.GetObjectMeta().GetUID()) */
 }
 
 func (this *PodWatcher) getFirmamentLabelSelectorFromNodeSelectorMap(nodeSelector NodeSelectors) []*firmament.LabelSelector {

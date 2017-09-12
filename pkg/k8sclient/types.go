@@ -24,12 +24,13 @@ import (
 	"github.com/camsas/poseidon/pkg/firmament"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+	flowcontrol "k8s.io/client-go/util/flowcontrol"
 )
 
 const bytesToKb = 1024
 
 // Used to guard access to the pod, task and job related maps.
-var PodsCond *sync.Cond
+var PodsCond *sync.Mutex
 var PodToTD map[PodIdentifier]*firmament.TaskDescriptor
 var TaskIDToPod map[uint64]PodIdentifier
 var jobIDToJD map[string]*firmament.JobDescriptor
@@ -106,8 +107,10 @@ type NodeWatcher struct {
 
 type PodWatcher struct {
 	//ID string
-	clientset    kubernetes.Interface
-	podWorkQueue Queue
-	controller   cache.Controller
-	fc           firmament.FirmamentSchedulerClient
+	clientset     kubernetes.Interface
+	podWorkQueue  Queue
+	controller    cache.Controller
+	fc            firmament.FirmamentSchedulerClient
+	PushRateLimit flowcontrol.RateLimiter
+	podFCQueue    Queue
 }

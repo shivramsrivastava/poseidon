@@ -20,15 +20,20 @@ package main
 
 import (
 	"flag"
+	"time"
+	//"runtime/pprof"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/camsas/poseidon/pkg/firmament"
 	"github.com/camsas/poseidon/pkg/k8sclient"
 	"github.com/camsas/poseidon/pkg/stats"
 	"github.com/golang/glog"
 )
+
+var globalSchedulingTime time.Duration
+var gloablNoOfDelats int
+var gloablBindPodTime time.Duration
 
 var (
 	schedulerName      string
@@ -47,18 +52,32 @@ func init() {
 	flag.StringVar(&statsServerAddress, "statsServerAddress", "0.0.0.0:9091", "Address on which the stats server listens")
 	flag.IntVar(&schedulingInterval, "schedulingInterval", 10, "Time between scheduler runs (in seconds)")
 	flag.Parse()
+
 }
 
 func schedule(fc firmament.FirmamentSchedulerClient) {
 	for {
+		timeNow := time.Now()
 		deltas := firmament.Schedule(fc)
-		glog.Infof("Scheduler returned %d deltas", len(deltas.GetDeltas()))
+		sinceTime := time.Now()
+		noOfDelats := len(deltas.GetDeltas())
+		glog.Info("Benchmark: Time taken for ", noOfDelats, " no of pods to get a delta ", sinceTime.Sub(timeNow), " Start:", timeNow, " End:", sinceTime)
+		globalSchedulingTime = globalSchedulingTime + sinceTime.Sub(timeNow)
+		gloablNoOfDelats = gloablNoOfDelats + noOfDelats
+		glog.Info("Benchmark: 3) a) Overall Time taken for ", gloablNoOfDelats, " no of pods to get a delta ", globalSchedulingTime)
+		//glog.Infof("Scheduler returned %d deltas", noOfDelats)
+		if len(deltas.GetDeltas()) == 0 {
+			time.Sleep(time.Duration(schedulingInterval) * time.Second)
+			continue
+		}
+		//var deltaforloop, deltaforloopEnd time.Time
 		for _, delta := range deltas.GetDeltas() {
 			switch delta.GetType() {
 			case firmament.SchedulingDelta_PLACE:
-				k8sclient.PodsCond.L.Lock()
+				//deltaforloop = time.Now()
+				k8sclient.PodsCond.Lock()
 				podIdentifier, ok := k8sclient.TaskIDToPod[delta.GetTaskId()]
-				k8sclient.PodsCond.L.Unlock()
+				k8sclient.PodsCond.Unlock()
 				if !ok {
 					glog.Fatalf("Placed task %d without pod pairing", delta.GetTaskId())
 				}
@@ -68,11 +87,12 @@ func schedule(fc firmament.FirmamentSchedulerClient) {
 				if !ok {
 					glog.Fatalf("Placed task %d on resource %s without node pairing", delta.GetTaskId(), delta.GetResourceId())
 				}
-				k8sclient.BindPodToNode(podIdentifier.Name, podIdentifier.Namespace, nodeName)
+				go k8sclient.BindPodToNode(podIdentifier.Name, podIdentifier.Namespace, nodeName)
+				//deltaforloopEnd = time.Now()
 			case firmament.SchedulingDelta_PREEMPT, firmament.SchedulingDelta_MIGRATE:
-				k8sclient.PodsCond.L.Lock()
+				k8sclient.PodsCond.Lock()
 				podIdentifier, ok := k8sclient.TaskIDToPod[delta.GetTaskId()]
-				k8sclient.PodsCond.L.Unlock()
+				k8sclient.PodsCond.Unlock()
 				if !ok {
 					glog.Fatalf("Preempted task %d without pod pairing", delta.GetTaskId())
 				}
@@ -85,17 +105,22 @@ func schedule(fc firmament.FirmamentSchedulerClient) {
 			default:
 				glog.Fatalf("Unexpected SchedulingDelta type %v", delta.GetType())
 			}
+			//glog.Info("Time taken in Schedule for loop", deltaforloopEnd.Sub(deltaforloop), " Start:", deltaforloop, " End:", deltaforloopEnd)
+
 		}
+		//glog.Info("Time taken for ", index, " no of pods to get a delta ", time.Since(timeNow))
 		// TODO(ionel): Temporary sleep statement because we currently call the scheduler even if there's no work do to.
 		time.Sleep(time.Duration(schedulingInterval) * time.Second)
 	}
 }
 
 func main() {
+
 	glog.Info("Starting Poseidon...")
 	fc, conn, err := firmament.New(firmamentAddress)
 	defer conn.Close()
 	if err != nil {
+		glog.Info("main dumil", err)
 		panic(err)
 	}
 	go schedule(fc)
@@ -110,4 +135,5 @@ func main() {
 		glog.Fatalf("Incorrect content in --kubeVersion %s", kubeVersion)
 	}
 	k8sclient.New(schedulerName, kubeConfig, kubeMajorVer, kubeMinorVer, firmamentAddress)
+	glog.Info("Im blocking here")
 }
