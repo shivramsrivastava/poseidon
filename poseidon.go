@@ -31,10 +31,6 @@ import (
 	"github.com/golang/glog"
 )
 
-var globalSchedulingTime time.Duration
-var gloablNoOfDelats int
-var gloablBindPodTime time.Duration
-
 var (
 	schedulerName      string
 	firmamentAddress   string
@@ -57,15 +53,7 @@ func init() {
 
 func schedule(fc firmament.FirmamentSchedulerClient) {
 	for {
-		timeNow := time.Now()
 		deltas := firmament.Schedule(fc)
-		sinceTime := time.Now()
-		noOfDelats := len(deltas.GetDeltas())
-		glog.Info("Benchmark: Time taken for ", noOfDelats, " no of pods to get a delta ", sinceTime.Sub(timeNow), " Start:", timeNow, " End:", sinceTime)
-		globalSchedulingTime = globalSchedulingTime + sinceTime.Sub(timeNow)
-		gloablNoOfDelats = gloablNoOfDelats + noOfDelats
-		glog.Info("Benchmark: 3) a) Overall Time taken for ", gloablNoOfDelats, " no of pods to get a delta ", globalSchedulingTime)
-		//glog.Infof("Scheduler returned %d deltas", noOfDelats)
 		if len(deltas.GetDeltas()) == 0 {
 			time.Sleep(time.Duration(schedulingInterval) * time.Second)
 			continue
@@ -87,7 +75,7 @@ func schedule(fc firmament.FirmamentSchedulerClient) {
 				if !ok {
 					glog.Fatalf("Placed task %d on resource %s without node pairing", delta.GetTaskId(), delta.GetResourceId())
 				}
-				go k8sclient.BindPodToNode(podIdentifier.Name, podIdentifier.Namespace, nodeName)
+				k8sclient.BindPodToNode(podIdentifier.Name, podIdentifier.Namespace, nodeName)
 				//deltaforloopEnd = time.Now()
 			case firmament.SchedulingDelta_PREEMPT, firmament.SchedulingDelta_MIGRATE:
 				k8sclient.PodsCond.Lock()
@@ -105,10 +93,7 @@ func schedule(fc firmament.FirmamentSchedulerClient) {
 			default:
 				glog.Fatalf("Unexpected SchedulingDelta type %v", delta.GetType())
 			}
-			//glog.Info("Time taken in Schedule for loop", deltaforloopEnd.Sub(deltaforloop), " Start:", deltaforloop, " End:", deltaforloopEnd)
-
 		}
-		//glog.Info("Time taken for ", index, " no of pods to get a delta ", time.Since(timeNow))
 		// TODO(ionel): Temporary sleep statement because we currently call the scheduler even if there's no work do to.
 		time.Sleep(time.Duration(schedulingInterval) * time.Second)
 	}

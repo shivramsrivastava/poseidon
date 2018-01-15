@@ -107,10 +107,8 @@ type NodeWatcher struct {
 
 type PodWatcher struct {
 	//ID string
-	clientset     kubernetes.Interface
-	podWorkQueue  Queue
-	controller    cache.Controller
-	fc            firmament.FirmamentSchedulerClient
-	PushRateLimit flowcontrol.RateLimiter
-	podFCQueue    Queue
+	clientset    kubernetes.Interface
+	podWorkQueue Queue
+	controller   cache.Controller
+	fc           firmament.FirmamentSchedulerClient
 }

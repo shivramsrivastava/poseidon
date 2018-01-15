@@ -27,16 +27,13 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"time"
-	flowcontrol "k8s.io/client-go/util/flowcontrol"
 )
 
-var clientSet, clientSet1, clientSet2 kubernetes.Interface
+var clientSet, clientSetPods, clientSetNodes kubernetes.Interface
 var totalElapsedTime time.Duration // this time should give the over all schedul time
-var PushRateLimit flowcontrol.RateLimiter
 
 func BindPodToNode(podName string, namespace string, nodeName string) {
-	//singleBindcallTime := time.Now()
-	PushRateLimit.Accept()
+
 	err := clientSet.CoreV1().Pods(namespace).Bind(&v1.Binding{
 		meta_v1.TypeMeta{},
 		meta_v1.ObjectMeta{
@@ -46,14 +43,9 @@ func BindPodToNode(podName string, namespace string, nodeName string) {
 			Namespace: namespace,
 			Name:      nodeName,
 		}})
-	//sinceTime := time.Now()
-	//glog.Info("Current Bind call time", sinceTime.Sub(singleBindcallTime), " Start:", singleBindcallTime, " End:", sinceTime)
-	//totalElapsedTime = totalElapsedTime + sinceTime.Sub(singleBindcallTime)
-	//glog.Info(" Total Bind call summzation ", totalElapsedTime)
+
 	if err != nil {
 		glog.Info("Could not bind %v", err)
-		time.Sleep(time.Millisecond * 5)
-		BindPodToNode(podName,namespace,nodeName)
 	}
 }
 
@@ -70,7 +62,6 @@ func GetClientConfig(kubeconfig string) (*rest.Config, error) {
 
 func New(schedulerName string, kubeConfig string, kubeVersionMajor, kubeVersionMinor int, firmamentAddress string) {
 
-	PushRateLimit=flowcontrol.NewTokenBucketRateLimiter(500,500)
 	config, err := GetClientConfig(kubeConfig)
 	if err != nil {
 		glog.Fatalf("Failed to load client config: %v", err)
@@ -82,12 +73,12 @@ func New(schedulerName string, kubeConfig string, kubeVersionMajor, kubeVersionM
 		glog.Fatalf("Failed to create connection: %v", err)
 	}
 
-	clientSet1, err = kubernetes.NewForConfig(config)
+	clientSetPods, err = kubernetes.NewForConfig(config)
 	if err != nil {
 		glog.Fatalf("Failed to create connection: %v", err)
 	}
 
-	clientSet2, err = kubernetes.NewForConfig(config)
+	clientSetNodes, err = kubernetes.NewForConfig(config)
 	if err != nil {
 		glog.Fatalf("Failed to create connection: %v", err)
 	}
@@ -117,9 +108,7 @@ func New(schedulerName string, kubeConfig string, kubeVersionMajor, kubeVersionM
 
 	glog.Info("k8s newclient called")
 	stopCh := make(chan struct{})
-	go NewPodWatcher(kubeVersionMajor, kubeVersionMinor, schedulerName, clientSet1, fc1).Run(stopCh, 100)
-	go NewNodeWatcher(clientSet2, fc2).Run(stopCh, 10)
-
-	// We block here.
+	go NewPodWatcher(kubeVersionMajor, kubeVersionMinor, schedulerName, clientSetPods, fc1).Run(stopCh, 100)
+	go NewNodeWatcher(clientSetNodes, fc2).Run(stopCh, 10)
 	<-stopCh
 }

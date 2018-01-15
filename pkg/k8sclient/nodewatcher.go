@@ -129,7 +129,7 @@ func (this *NodeWatcher) enqueueNodeAddition(key, obj interface{}) {
 	}
 	addedNode := this.parseNode(node, NodeAdded)
 	this.nodeWorkQueue.Add(key, addedNode)
-	//glog.Info("enqueueNodeAdition: Added node ", addedNode.Hostname)
+	glog.Info("enqueueNodeAdition: Added node ", addedNode.Hostname)
 }
 
 func (this *NodeWatcher) enqueueNodeUpdate(key, oldObj, newObj interface{}) {
@@ -140,13 +140,13 @@ func (this *NodeWatcher) enqueueNodeUpdate(key, oldObj, newObj interface{}) {
 		if oldNode.Spec.Unschedulable {
 			addedNode := this.parseNode(newNode, NodeAdded)
 			this.nodeWorkQueue.Add(key, addedNode)
-			//glog.Info("enqueueNodeUpdate: Added node ", addedNode.Hostname)
+			glog.Info("enqueueNodeUpdate: Added node ", addedNode.Hostname)
 			return
 		} else {
 			// Can not schedule pods on the node any more.
 			deletedNode := this.parseNode(newNode, NodeDeleted)
 			this.nodeWorkQueue.Add(key, deletedNode)
-			//glog.Info("enqueueNodeUpdate: Deleted node ", deletedNode.Hostname)
+			glog.Info("enqueueNodeUpdate: Deleted node ", deletedNode.Hostname)
 			return
 		}
 	}
@@ -157,12 +157,12 @@ func (this *NodeWatcher) enqueueNodeUpdate(key, oldObj, newObj interface{}) {
 		if newIsReady && !newIsOutOfDisk {
 			addedNode := this.parseNode(newNode, NodeAdded)
 			this.nodeWorkQueue.Add(key, addedNode)
-			//glog.Info("enqueueNodeUpdate: Added node ", addedNode.Hostname)
+			glog.Info("enqueueNodeUpdate: Added node ", addedNode.Hostname)
 			return
 		} else {
 			failedNode := this.parseNode(newNode, NodeFailed)
 			this.nodeWorkQueue.Add(key, failedNode)
-			//glog.Info("enqueueNodeUpdate: Failed node ", failedNode.Hostname)
+			glog.Info("enqueueNodeUpdate: Failed node ", failedNode.Hostname)
 			return
 		}
 	}
@@ -219,66 +219,66 @@ func (this *NodeWatcher) Run(stopCh <-chan struct{}, nWorkers int) {
 }
 
 func (this *NodeWatcher) nodeWorker() {
-		func() {
-			key, items, quit := this.nodeWorkQueue.Get()
-			if quit {
-				return
-			}
-			for _, item := range items {
-				node := item.(*Node)
-				switch node.Phase {
-				case NodeAdded:
-					NodesCond.L.Lock()
-					rtnd := this.createResourceTopologyForNode(node)
-					_, ok := NodeToRTND[node.Hostname]
-					if ok {
-						glog.Fatalf("Node %s already exists", node.Hostname)
-					}
-					NodeToRTND[node.Hostname] = rtnd
-					ResIDToNode[rtnd.GetResourceDesc().GetUuid()] = node.Hostname
-					NodesCond.L.Unlock()
-					firmament.NodeAdded(this.fc, rtnd)
-				case NodeDeleted:
-					NodesCond.L.Lock()
-					rtnd, ok := NodeToRTND[node.Hostname]
-					NodesCond.L.Unlock()
-					if !ok {
-						glog.Fatalf("Node %s does not exist", node.Hostname)
-					}
-					resID := rtnd.GetResourceDesc().GetUuid()
-					firmament.NodeRemoved(this.fc, &firmament.ResourceUID{ResourceUid: resID})
-					NodesCond.L.Lock()
-					delete(NodeToRTND, node.Hostname)
-					delete(ResIDToNode, resID)
-					NodesCond.L.Unlock()
-				case NodeFailed:
-					NodesCond.L.Lock()
-					rtnd, ok := NodeToRTND[node.Hostname]
-					NodesCond.L.Unlock()
-					if !ok {
-						glog.Fatalf("Node %s does not exist", node.Hostname)
-					}
-					resID := rtnd.GetResourceDesc().GetUuid()
-					firmament.NodeFailed(this.fc, &firmament.ResourceUID{ResourceUid: resID})
-					NodesCond.L.Lock()
-					this.cleanResourceStateForNode(rtnd)
-					delete(NodeToRTND, node.Hostname)
-					delete(ResIDToNode, resID)
-					NodesCond.L.Unlock()
-				case NodeUpdated:
-					NodesCond.L.Lock()
-					rtnd, ok := NodeToRTND[node.Hostname]
-					NodesCond.L.Unlock()
-					if !ok {
-						glog.Fatalf("Node %s does not exist", node.Hostname)
-					}
-					firmament.NodeUpdated(this.fc, rtnd)
-				default:
-					glog.Fatalf("Unexpected node %s phase %s", node.Hostname, node.Phase)
+	func() {
+		key, items, quit := this.nodeWorkQueue.Get()
+		if quit {
+			return
+		}
+		for _, item := range items {
+			node := item.(*Node)
+			switch node.Phase {
+			case NodeAdded:
+				NodesCond.L.Lock()
+				rtnd := this.createResourceTopologyForNode(node)
+				_, ok := NodeToRTND[node.Hostname]
+				if ok {
+					glog.Fatalf("Node %s already exists", node.Hostname)
 				}
+				NodeToRTND[node.Hostname] = rtnd
+				ResIDToNode[rtnd.GetResourceDesc().GetUuid()] = node.Hostname
+				NodesCond.L.Unlock()
+				firmament.NodeAdded(this.fc, rtnd)
+			case NodeDeleted:
+				NodesCond.L.Lock()
+				rtnd, ok := NodeToRTND[node.Hostname]
+				NodesCond.L.Unlock()
+				if !ok {
+					glog.Fatalf("Node %s does not exist", node.Hostname)
+				}
+				resID := rtnd.GetResourceDesc().GetUuid()
+				firmament.NodeRemoved(this.fc, &firmament.ResourceUID{ResourceUid: resID})
+				NodesCond.L.Lock()
+				delete(NodeToRTND, node.Hostname)
+				delete(ResIDToNode, resID)
+				NodesCond.L.Unlock()
+			case NodeFailed:
+				NodesCond.L.Lock()
+				rtnd, ok := NodeToRTND[node.Hostname]
+				NodesCond.L.Unlock()
+				if !ok {
+					glog.Fatalf("Node %s does not exist", node.Hostname)
+				}
+				resID := rtnd.GetResourceDesc().GetUuid()
+				firmament.NodeFailed(this.fc, &firmament.ResourceUID{ResourceUid: resID})
+				NodesCond.L.Lock()
+				this.cleanResourceStateForNode(rtnd)
+				delete(NodeToRTND, node.Hostname)
+				delete(ResIDToNode, resID)
+				NodesCond.L.Unlock()
+			case NodeUpdated:
+				NodesCond.L.Lock()
+				rtnd, ok := NodeToRTND[node.Hostname]
+				NodesCond.L.Unlock()
+				if !ok {
+					glog.Fatalf("Node %s does not exist", node.Hostname)
+				}
+				firmament.NodeUpdated(this.fc, rtnd)
+			default:
+				glog.Fatalf("Unexpected node %s phase %s", node.Hostname, node.Phase)
 			}
-			defer this.nodeWorkQueue.Done(key)
-		}()
+		}
+		defer this.nodeWorkQueue.Done(key)
+	}()
 }
 
 func (this *NodeWatcher) cleanResourceStateForNode(rtnd *firmament.ResourceTopologyNodeDescriptor) {
@@ -290,6 +290,12 @@ func (this *NodeWatcher) cleanResourceStateForNode(rtnd *firmament.ResourceTopol
 
 func (this *NodeWatcher) createResourceTopologyForNode(node *Node) *firmament.ResourceTopologyNodeDescriptor {
 	resUuid := this.generateResourceID(node.Hostname)
+	availablePercentage := 0.8
+	ramCap := float64(node.MemCapacityKb)
+	cpuCap := float64(node.CpuCapacity)
+	ram := float64(node.MemAllocatableKb) * availablePercentage
+	cpuCores := float64(node.CpuAllocatable) * availablePercentage
+
 	rtnd := &firmament.ResourceTopologyNodeDescriptor{
 		ResourceDesc: &firmament.ResourceDescriptor{
 			Uuid:         resUuid,
@@ -297,8 +303,12 @@ func (this *NodeWatcher) createResourceTopologyForNode(node *Node) *firmament.Re
 			State:        firmament.ResourceDescriptor_RESOURCE_IDLE,
 			FriendlyName: node.Hostname,
 			ResourceCapacity: &firmament.ResourceVector{
-				RamCap:   uint64(node.MemCapacityKb),
-				CpuCores: float32(node.CpuCapacity),
+				RamCap:   uint64(ramCap),
+				CpuCores: float32(cpuCap),
+			},
+			AvailableResources: &firmament.ResourceVector{
+				CpuCores: float32(cpuCores),
+				RamCap:   uint64(ram),
 			},
 		},
 	}
@@ -327,6 +337,9 @@ func (this *NodeWatcher) createResourceTopologyForNode(node *Node) *firmament.Re
 			ResourceCapacity: &firmament.ResourceVector{
 				RamCap:   uint64(node.MemCapacityKb),
 				CpuCores: float32(node.CpuCapacity),
+			},
+			AvailableResources: &firmament.ResourceVector{
+				CpuCores: float32(node.CpuAllocatable),
 			},
 		},
 		ParentId: resUuid,
