@@ -19,11 +19,11 @@
 package k8sclient
 
 import (
-	"github.com/camsas/poseidon/pkg/firmament"
 	"github.com/golang/glog"
+	"github.com/poseidon/pkg/firmament"
+	"k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"time"

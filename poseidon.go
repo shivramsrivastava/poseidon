@@ -25,10 +25,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/camsas/poseidon/pkg/firmament"
-	"github.com/camsas/poseidon/pkg/k8sclient"
-	"github.com/camsas/poseidon/pkg/stats"
 	"github.com/golang/glog"
+	"github.com/poseidon/pkg/firmament"
+	"github.com/poseidon/pkg/k8sclient"
+	"github.com/poseidon/pkg/stats"
 )
 
 var (

@@ -4,8 +4,8 @@
 package mock_firmament
 
 import (
-	firmament "github.com/camsas/poseidon/pkg/firmament"
 	gomock "github.com/golang/mock/gomock"
+	firmament "github.com/poseidon/pkg/firmament"
 	context "golang.org/x/net/context"
 	grpc "google.golang.org/grpc"
 )
