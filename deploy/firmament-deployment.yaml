@@ -26,8 +26,8 @@ spec:
         scheduler: firmament
     spec:
       containers:
-      - command: [/firmament/build/src/firmament_scheduler, --flagfile=/firmament/default.conf, --firmament_scheduler_service_address=0.0.0.0, --flow_scheduling_binary=/firmament/build/third_party/flowlessly/src/flowlessly-build/flow_scheduler]
-        image: camsas/firmament:dev
+      - command: [/firmament/build/src/firmament_scheduler, --flagfile=/firmament/config/firmament_scheduler.cfg_cpu_cost, --firmament_scheduler_service_address=0.0.0.0, --flow_scheduling_binary=/firmament/build/third_party/cs2/src/cs2/cs2.exe]
+        image: shivramsrivastava/firmament:dev
         name: firmament-scheduler
         ports:
          - containerPort: 9090
