@@ -19,7 +19,7 @@
 package k8sclient
 
 import (
-	//"encoding/json"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -29,6 +29,7 @@ import (
 
 	"github.com/camsas/poseidon/pkg/firmament"
 	"github.com/golang/glog"
+	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,7 +37,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -456,7 +456,7 @@ func GetOwnerReference(pod *v1.Pod) string {
 	}
 
 	// Return 'kubernetes.io/created-by' if it exists.
-	if createdByAnnotation, ok := pod.GetObjectMeta().GetAnnotations()[v1.CreatedByAnnotation]; ok {
+	if createdByAnnotation, ok := pod.GetObjectMeta().GetAnnotations()["kubernetes.io/created-by"]; ok {
 		var serialCreatedBy v1.SerializedReference
 		err := json.Unmarshal([]byte(createdByAnnotation), &serialCreatedBy)
 		if err == nil {
