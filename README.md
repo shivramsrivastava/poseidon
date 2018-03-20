@@ -1,99 +1,52 @@
-Poseidon is Firmament's (http://www.firmament.io) integration with
-Kubernetes.
+# Introduction
+The Poseidon/Firmament scheduler incubation project is to bring integration of Firmament Scheduler (OSDI paper) in Kubernetes.
+At a very high level, Poseidon/Firmament scheduler augments the 
+current Kubernetes scheduling capabilities by incorporating a new 
+novel flow network graph based scheduling capabilities alongside the default Kubernetes Scheduler. 
+Firmament models workloads and clusters as flow networks and runs min-cost flow optimizations over these networks to make scheduling decisions.
 
-[![Build Status](https://travis-ci.org/camsas/poseidon.svg)](https://travis-ci.org/camsas/poseidon)
-[![Coverage Status](https://coveralls.io/repos/github/camsas/poseidon/badge.svg?branch=master)](https://coveralls.io/github/camsas/poseidon?branch=master)
+Due to the inherent rescheduling capabilities, the new scheduler enables a globally optimal scheduling environment that constantly keeps refining the workloads placements dynamically.
 
-***Note: this repo contains an initial prototype, it may break at any time! :)***
+As we all know that as part of the Kubernetes multiple schedulers support, each new pod is typically scheduled by the default scheduler, but Kubernetes can be instructed to use another scheduler by specifying the name of another custom scheduler (Poseidon in our case) at the time of pod deployment. In this case, the default scheduler will ignore that Pod and allow Poseidon scheduler to schedule the Pod on a relevant node.
 
-# Getting started
+# Key Advantages
 
-The easiest way to get Poseidon up and running is to use our Docker image:
+* Flow graph scheduling provides the following 
+  * Support for high-volume workloads placement 
+  * Complex rule constraints 
+  * Globally optimal scheduling
+  * Extremely high scalability. 
+  
+  **NOTE:** Additionally, it is also very important to highlight that Firmament scales much better than default scheduler as the number of nodes increase in a cluster.
 
-```
-$ docker pull camsas/poseidon:dev
-```
-Once the image has downloaded, you can start Poseidon as follows:
-```
-$ docker run camsas/poseidon:dev poseidon \
-    --logtostderr \
-    --kubeConfig=<path_kubeconfig_file> \
-    --firmamentAddress=<host>:<port> \
-    --statsServerAddress=<host>:<port> \
-    --kubeVersion=<Major.Minor>
-```
-Note that Poseidon will try to schedule for Kubernetes even if `kube-scheduler`
-is running. How you best avoid conflicts depends on the version of Kubernetes
-you are running:
- 1. If you are using Kubernetes <1.6, shut down `kube-scheduler` first, and make
-    sure your pods are labeled with `scheduler: poseidon`.
- 2. If you are using Kubernetes 1.6+, you do not have to to shut down
-    `kube-scheduler`, but you must specify `schedulerName: poseidon` in your pod
-    specs.
-
-You will also need to ensure that the API server is reachable from the Poseidon
-container's network (e.g., using `--net=host` if you're running a local
-development cluster).
-
-# Building from source
-
-## System requirements
-
- * Go 1.7+
- * Docker 1.7+
- * Kubernetes v1.1+
-
-A known-good build environment is Ubuntu 14.04.
-
-## Build process
-
-Run:
-
-```
-$ go build
-$ go install
-```
-
-Following, make sure you have a Kubernetes cluster running. If you're running Ubuntu on amd64 then you can execute:
-
-```
-./deploy/build_kubernetes.sh
-./deploy/run_kubernetes.sh
-```
-
-Next, make sure you have a Firmament scheduler service running. You can follow
-these [instructions](https://github.com/camsas/firmament/blob/master/README.md#running-the-firmament-scheduler-service)
-to build and deploy Firmament.
+An argument can be made from functional parity standpoint between two scheduling algorithms at this point of time. Currently, Firmament functionally is not at par with the default scheduler, especially for affinity/anti-affinity functionality as well as various other functional features currently supported in the default scheduling algorithm. It would definitely take some time to bridge the functionality gap between two scheduling algorithms. But our argument is that due to the exceptional throughput superiority of Firmament scheduler, certain use cases may not even require additional functional features such as advanced affinity/anti-affinity etc.
 
 
-Finally, to start up Poseidon, run:
+For more details about the design of this project see the [design document](https://docs.google.com/document/d/1VNoaw1GoRK-yop_Oqzn7wZhxMxvN3pdNjuaICjXLarA/edit?usp=sharing) doc.
 
-```
-$ poseidon --logtostderr \
-    --kubeConfig=<path_kubeconfig_file> \
-    --firmamentAddress=<host>:<port> \
-    --statsServerAddress=<host>:<port> \
-    --kubeVersion=<Major.Minor>
-```
 
-The configuration of the Firmament scheduler service is controlled by the
-configuration file in `${FIRMAMENT_HOME}/config/firmament_scheduler.cfg`. You
-can modify this file to control scheduling features (e.g. choose a scheduling
-policy). To apply changes, you need to restart (but not recompile) the
-Firmament scheduler service. For more info, check
-[the arguments accepted by Firmament](https://github.com/camsas/firmament/blob/master/README.md#using-the-flow-scheduler).
-All of these arguments can be set via the configuration file.
+![image](https://drive.google.com/open?id=1Yy-WI5cOIXNR5NANNsDyWShhrEjfqC1I)
 
-## Contributing
+# Installation
+  In cluster installation of poseidon, this method is to run posiedon and its components in 
+  kubernetes cluster.
+  
+  The following are the componentes required.
+   * [Running Kubernetes cluster](https://kubernetes.io/docs/setup/).
+   * [Firmament scheduler](https://github.com/Huawei-PaaS/firmament) deployment
+   * Poseidon deployment
+   * Heapster with the poseidon sink.
+   
+  Please start [here]().
+  
+  
+  
+# Development
+  For developers please refer [here]()
 
-We always welcome contributions to Poseidon. We use GerritHub for our code
-reviews, and you can find the Poseidon review board there:
 
-https://review.gerrithub.io/#/q/project:camsas/poseidon+is:open
-
-In order to do code reviews, you will need an account on GerritHub (you can link
-your GitHub account).
-
-The easiest way to submit changes for review is to check out Poseidon from
-GerritHub, or to add GerritHub as a remote. Alternatively, you can submit a pull
-request on GitHub and we will import it for review on GerritHub.
+# Roadmap
+  * Affinity and Anti-Affinity implementation
+  * CI and CD integration
+  * Documentation improvements
+  
