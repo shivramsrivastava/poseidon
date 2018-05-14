@@ -394,7 +394,6 @@ func (pw *PodWatcher) podWorker() {
 					if !ok {
 						glog.Fatalf("Pod %s does not exist", pod.Identifier)
 					}
-
 					firmament.TaskRemoved(pw.fc, &firmament.TaskUID{TaskUid: td.Uid})
 					PodMux.Lock()
 					delete(PodToTD, pod.Identifier)
@@ -498,6 +497,40 @@ func (pw *PodWatcher) addTaskToJob(pod *Pod, jd *firmament.JobDescriptor) *firma
 	// Get the network requirement from pods label, and set it in ResourceRequest of the TaskDescriptor
 	setTaskNetworkRequirement(task, pod.Labels)
 	task.LabelSelectors = pw.getFirmamentLabelSelectorFromNodeSelectorMap(pod.NodeSelector, SortNodeSelectorsKey(pod.NodeSelector))
+
+	nodeAffinity := len(pod.Affinity.NodeAffinity.HardScheduling.NodeSelectorTerms) > 0 || len(pod.Affinity.NodeAffinity.SoftScheduling) > 0
+	podAffinity := len(pod.Affinity.PodAffinity.HardScheduling) > 0 || len(pod.Affinity.PodAffinity.SoftScheduling) > 0
+	podAntiAffinity := len(pod.Affinity.PodAntiAffinty.HardScheduling) > 0 || len(pod.Affinity.PodAntiAffinty.SoftScheduling) > 0
+	localAffinity := new(firmament.Affinity)
+
+	if nodeAffinity {
+		localAffinity.NodeAffinity = &firmament.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &firmament.NodeSelector{
+				NodeSelectorTerms: pw.getFirmamentNodeSelTerm(pod),
+			},
+			PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentPreferredSchedulingTerm(pod),
+		}
+	}
+
+	if podAffinity {
+		localAffinity.PodAffinity = &firmament.PodAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution:  pw.getFirmamentPodAffinityTerm(pod),
+			PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentWeightedPodAffinityTerm(pod),
+		}
+	}
+
+	if podAntiAffinity {
+		localAffinity.PodAntiAffinity = &firmament.PodAntiAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution:  pw.getFirmamentPodAffinityTermforPodAntiAffinity(pod),
+			PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentWeightedPodAffinityTermforPodAntiAffinity(pod),
+		}
+
+	}
+
+	task.Affinity = localAffinity
+
+	glog.Info(task.Affinity)
+	glog.Info(task)
 
 	setTaskType(task)
 
