@@ -397,7 +397,6 @@ func (pw *PodWatcher) podWorker() {
 					if !ok {
 						glog.Fatalf("Pod %s does not exist", pod.Identifier)
 					}
-
 					firmament.TaskRemoved(pw.fc, &firmament.TaskUID{TaskUid: td.Uid})
 					PodMux.Lock()
 					delete(PodToTD, pod.Identifier)
@@ -505,115 +504,36 @@ func (pw *PodWatcher) addTaskToJob(pod *Pod, jd *firmament.JobDescriptor) *firma
 	nodeAffinity := len(pod.Affinity.NodeAffinity.HardScheduling.NodeSelectorTerms) > 0 || len(pod.Affinity.NodeAffinity.SoftScheduling) > 0
 	podAffinity := len(pod.Affinity.PodAffinity.HardScheduling) > 0 || len(pod.Affinity.PodAffinity.SoftScheduling) > 0
 	podAntiAffinity := len(pod.Affinity.PodAntiAffinty.HardScheduling) > 0 || len(pod.Affinity.PodAntiAffinty.SoftScheduling) > 0
+	localAffinity := new(firmament.Affinity)
+
 	if nodeAffinity {
-		if podAffinity {
-			if podAntiAffinity {
-				//NA + PA + PAA
-				task.Affinity = &firmament.Affinity{
-					NodeAffinity: &firmament.NodeAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution: &firmament.NodeSelector{
-							NodeSelectorTerms: pw.getFirmamentNodeSelTerm(pod),
-						},
-						PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentPreferredSchedulingTerm(pod),
-					},
-					PodAffinity: &firmament.PodAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution:  pw.getFirmamentPodAffinityTerm(pod),
-						PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentWeightedPodAffinityTerm(pod),
-					},
-					PodAntiAffinity: &firmament.PodAntiAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution:  pw.getFirmamentPodAffinityTermforPodAntiAffinity(pod),
-						PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentWeightedPodAffinityTermforPodAntiAffinity(pod),
-					},
-				}
-			} else {
-				//NA + PA
-				task.Affinity = &firmament.Affinity{
-					NodeAffinity: &firmament.NodeAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution: &firmament.NodeSelector{
-							NodeSelectorTerms: pw.getFirmamentNodeSelTerm(pod),
-						},
-						PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentPreferredSchedulingTerm(pod),
-					},
-					PodAffinity: &firmament.PodAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution:  pw.getFirmamentPodAffinityTerm(pod),
-						PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentWeightedPodAffinityTerm(pod),
-					},
-				}
-
-			}
-		} else {
-			//N + PAA
-			if podAntiAffinity {
-				task.Affinity = &firmament.Affinity{
-					NodeAffinity: &firmament.NodeAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution: &firmament.NodeSelector{
-							NodeSelectorTerms: pw.getFirmamentNodeSelTerm(pod),
-						},
-						PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentPreferredSchedulingTerm(pod),
-					},
-					PodAntiAffinity: &firmament.PodAntiAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution:  pw.getFirmamentPodAffinityTermforPodAntiAffinity(pod),
-						PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentWeightedPodAffinityTermforPodAntiAffinity(pod),
-					},
-				}
-			} else {
-				//N
-				task.Affinity = &firmament.Affinity{
-					NodeAffinity: &firmament.NodeAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution: &firmament.NodeSelector{
-							NodeSelectorTerms: pw.getFirmamentNodeSelTerm(pod),
-						},
-						PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentPreferredSchedulingTerm(pod),
-					},
-				}
-
-			}
-
-		}
-	} else {
-		if podAffinity {
-			if podAntiAffinity {
-				//PA + PAA
-				task.Affinity = &firmament.Affinity{
-					PodAffinity: &firmament.PodAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution:  pw.getFirmamentPodAffinityTerm(pod),
-						PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentWeightedPodAffinityTerm(pod),
-					},
-					PodAntiAffinity: &firmament.PodAntiAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution:  pw.getFirmamentPodAffinityTermforPodAntiAffinity(pod),
-						PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentWeightedPodAffinityTermforPodAntiAffinity(pod),
-					},
-				}
-			} else {
-				//PA
-				task.Affinity = &firmament.Affinity{
-					PodAffinity: &firmament.PodAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution:  pw.getFirmamentPodAffinityTerm(pod),
-						PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentWeightedPodAffinityTerm(pod),
-					},
-				}
-			}
-		} else {
-			if podAntiAffinity {
-				//PAA
-				task.Affinity = &firmament.Affinity{
-					NodeAffinity: &firmament.NodeAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution: &firmament.NodeSelector{
-							NodeSelectorTerms: pw.getFirmamentNodeSelTerm(pod),
-						},
-						PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentPreferredSchedulingTerm(pod),
-					},
-					PodAntiAffinity: &firmament.PodAntiAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution:  pw.getFirmamentPodAffinityTermforPodAntiAffinity(pod),
-						PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentWeightedPodAffinityTermforPodAntiAffinity(pod),
-					},
-				}
-			} else {
-				// Fields of NodeAffinity, PodAffinity and PoadAntiAffinity is not set
-			}
-
+		localAffinity.NodeAffinity = &firmament.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &firmament.NodeSelector{
+				NodeSelectorTerms: pw.getFirmamentNodeSelTerm(pod),
+			},
+			PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentPreferredSchedulingTerm(pod),
 		}
 	}
+
+	if podAffinity {
+		localAffinity.PodAffinity = &firmament.PodAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution:  pw.getFirmamentPodAffinityTerm(pod),
+			PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentWeightedPodAffinityTerm(pod),
+		}
+	}
+
+	if podAntiAffinity {
+		localAffinity.PodAntiAffinity = &firmament.PodAntiAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution:  pw.getFirmamentPodAffinityTermforPodAntiAffinity(pod),
+			PreferredDuringSchedulingIgnoredDuringExecution: pw.getFirmamentWeightedPodAffinityTermforPodAntiAffinity(pod),
+		}
+
+	}
+
+	task.Affinity = localAffinity
+
+	glog.Info(task.Affinity)
+	glog.Info(task)
 
 	setTaskType(task)
 
