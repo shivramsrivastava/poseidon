@@ -16,10 +16,6 @@ message NodeSelectorTerm {
     // A list of node selector requirements by node's labels.
     // +optional
     repeated NodeSelectorRequirement matchExpressions = 1;
-
-    // A list of node selector requirements by node's fields.
-    // +optional
-    repeated NodeSelectorRequirement matchFields = 2;
 }
 message NodeSelector {
     // Required. A list of node selector terms. The terms are ORed.
