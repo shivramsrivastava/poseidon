@@ -25,10 +25,7 @@ import (
 	"github.com/kubernetes-sigs/poseidon/test/e2e/framework"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/api/core/v1"
-	"k8s.io/api/extensions/v1beta1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -57,6 +54,7 @@ var _ = Describe("Poseidon", func() {
 		f.ListPodsInNamespace(f.Namespace.Name)
 	})
 
+	/*
 	Describe("Add Pod using Poseidon scheduler", func() {
 		glog.Info("Inside Check for adding pod using Poseidon scheduler")
 		Context("using firmament for configuring pod", func() {
@@ -290,6 +288,8 @@ var _ = Describe("Poseidon", func() {
 		})
 	})
 
+	*/
+
 	Describe("Poseidon [Predicates]", func() {
 		// This test verifies we don't allow scheduling of pods in a way that sum of
 		// limits of pods is greater than machines capacity.
@@ -425,6 +425,7 @@ var _ = Describe("Poseidon", func() {
 				},
 			}
 			testPod := createTestPod(f, conf)
+			framework.Logf("testPod info %v", testPod)
 			// Clean up additional pod after this test.
 			defer func() {
 				framework.Logf("Time to clean up the pod [%s] now...", testPod.Name)
@@ -443,11 +444,14 @@ var _ = Describe("Poseidon", func() {
 		It("validates that NodeSelector is respected if matching ", func() {
 			// Randomly pick a node
 			nodeName := getNodeThatCanRunPodWithoutToleration(f)
+			framework.Logf("nodeName from getNodeThatCanRunPodWithoutToleration, nodeName", nodeName)
 
 			By("Trying to apply a random label on the found node.")
 			k := fmt.Sprintf("kubernetes.io/e2e-%d", rand.Uint32())
 			v := "42"
 
+			// read the node info from here
+			go framework.GetNodesOrDie(clientset)
 			framework.AddOrUpdateLabelOnNode(clientset, nodeName, k, v)
 			framework.ExpectNodeHasLabel(clientset, nodeName, k, v)
 

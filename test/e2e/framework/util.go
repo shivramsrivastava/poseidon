@@ -143,6 +143,8 @@ var (
 // Waits default amount of time (PodStartTimeout) for the specified pod to become running.
 // Returns an error if timeout occurs first, or pod goes in to failed state.
 func WaitForPodRunningInNamespace(c clientset.Interface, pod *v1.Pod) error {
+
+	Logf("%v pod in WaitForPodRunningInNamespace: %v podtimeout", pod, PodStartTimeout)
 	if pod.Status.Phase == v1.PodRunning {
 		return nil
 	}
@@ -311,9 +313,30 @@ func ExpectNoErrorWithOffset(offset int, err error, explain ...interface{}) {
 }
 
 // GetMasterAndWorkerNodesOrDie will return a list masters and schedulable worker nodes
-func GetNodesOrDie(c clientset.Interface) *v1.NodeList {
-	all, _ := c.CoreV1().Nodes().List(metav1.ListOptions{})
-	return all
+func GetNodesOrDie(c clientset.Interface) {
+
+	// wait for namespace to delete or timeout.
+	_ = wait.PollInfinite(2*time.Second, func() (bool, error) {
+		all, err := c.CoreV1().Nodes().List(metav1.ListOptions{})
+		if err != nil {
+			for _, v := range all.Items {
+				// we will print the node-name,namespace and the label its has
+				Logf("####################\n")
+				Logf("Node %v in %v namespace\n", v.Name, v.Namespace)
+
+				Logf("Node Labels\n")
+				for key, value := range v.Labels {
+					Logf("key:value%v:%v", key, value)
+				}
+				Logf("####################\n")
+			}
+			// loops for ever
+			return false,nil
+		}else{
+			// error occurred to return true, err and exit
+			return true,err
+		}
+	})
 }
 
 func AddOrUpdateLabelOnNode(c clientset.Interface, nodeName string, labelKey, labelValue string) {
