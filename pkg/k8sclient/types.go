@@ -153,9 +153,9 @@ type PodAffinity struct {
 }
 
 type Affinity struct {
-	NodeAffinity   *NodeAffinity
-	PodAffinity    *PodAffinity
-	PodAntiAffinty *PodAffinity
+	NodeAffinity    *NodeAffinity
+	PodAffinity     *PodAffinity
+	PodAntiAffinity *PodAffinity
 }
 
 // Pod is an internal structure for a Kubernetes pod.

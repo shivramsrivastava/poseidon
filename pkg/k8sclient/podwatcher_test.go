@@ -302,7 +302,7 @@ func TestPodWatcher_enqueuePodAddition(t *testing.T) {
 							},
 						},
 					},
-					PodAntiAffinty: &PodAffinity{
+					PodAntiAffinity: &PodAffinity{
 						HardScheduling: []PodAffinityTerm{
 							{
 								LabelSelector: &metav1.LabelSelector{
@@ -364,7 +364,7 @@ func TestPodWatcher_enqueuePodAddition(t *testing.T) {
 							},
 						},
 					},
-					PodAntiAffinty: &PodAffinity{
+					PodAntiAffinity: &PodAffinity{
 						HardScheduling: []PodAffinityTerm{
 							{
 								LabelSelector: &metav1.LabelSelector{
@@ -426,7 +426,7 @@ func TestPodWatcher_enqueuePodAddition(t *testing.T) {
 							},
 						},
 					},
-					PodAntiAffinty: &PodAffinity{
+					PodAntiAffinity: &PodAffinity{
 						HardScheduling: []PodAffinityTerm{
 							{
 								LabelSelector: &metav1.LabelSelector{
@@ -488,7 +488,7 @@ func TestPodWatcher_enqueuePodAddition(t *testing.T) {
 							},
 						},
 					},
-					PodAntiAffinty: &PodAffinity{
+					PodAntiAffinity: &PodAffinity{
 						HardScheduling: []PodAffinityTerm{
 							{
 								LabelSelector: &metav1.LabelSelector{
