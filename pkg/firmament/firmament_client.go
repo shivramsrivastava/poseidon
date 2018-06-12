@@ -34,6 +34,15 @@ func Schedule(client FirmamentSchedulerClient) *SchedulingDeltas {
 	return scheduleResp
 }
 
+// QueueBasedSchedule sends a schedule request to firmament server for pod affinity/antiaffinity tasks.
+func QueueBasedSchedule(client FirmamentSchedulerClient) *SchedulingDeltas {
+       scheduleResp, err := client.QueueBasedSchedule(context.Background(), &ScheduleRequest{})
+       if err != nil {
+               grpclog.Fatalf("%v.Schedule(_) = _, %v: ", client, err)
+       }
+       return scheduleResp
+}
+
 // TaskCompleted tells firmament server the given task is completed.
 func TaskCompleted(client FirmamentSchedulerClient, tuid *TaskUID) {
 	tCompletedResp, err := client.TaskCompleted(context.Background(), tuid)

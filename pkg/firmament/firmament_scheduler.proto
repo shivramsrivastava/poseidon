@@ -15,6 +15,9 @@ import "scheduling_delta.proto";
 service FirmamentScheduler {
   // Schedule sends a schedule request to firmament server.
   rpc Schedule (ScheduleRequest) returns (SchedulingDeltas) {}
+  // QueueBasedSchedule sends a schedule request to firmament 
+  // server for pod affinity/antiaffinity tasks.
+  rpc QueueBasedSchedule (ScheduleRequest) returns (SchedulingDeltas) {}
 
   // TaskCompleted notifies firmament server the given task is completed.
   rpc TaskCompleted (TaskUID) returns (TaskCompletedResponse) {}

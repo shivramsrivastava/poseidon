@@ -32,8 +32,20 @@ import (
 )
 
 func schedule(fc firmament.FirmamentSchedulerClient) {
+        var deltas *firmament.SchedulingDeltas
+        start := time.Now()
+        elapsed := time.Since(start)
+        var scheduling_type = "batch"
 	for {
-		deltas := firmament.Schedule(fc)
+                if scheduling_type == "queue_based" {
+                   start = time.Now()
+                   deltas = firmament.QueueBasedSchedule(fc)
+                   elapsed = time.Since(start)
+                   scheduling_type = "batch"
+                } else {
+                   deltas = firmament.Schedule(fc)
+                   scheduling_type = "queue_based"
+                }
 		glog.Infof("Scheduler returned %d deltas", len(deltas.GetDeltas()))
 		for _, delta := range deltas.GetDeltas() {
 			switch delta.GetType() {
@@ -74,7 +86,9 @@ func schedule(fc firmament.FirmamentSchedulerClient) {
 			}
 		}
 		// TODO(ionel): Temporary sleep statement because we currently call the scheduler even if there's no work do to.
-		time.Sleep(time.Duration(config.GetSchedulingInterval()) * time.Second)
+                if scheduling_type == "batch" {
+                  time.Sleep(time.Duration(config.GetSchedulingInterval() - int(elapsed.Seconds())) * time.Second)
+                }
 	}
 }
 
