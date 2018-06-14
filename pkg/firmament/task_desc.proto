@@ -27,6 +27,7 @@ import "reference_desc.proto";
 import "resource_vector.proto";
 import "task_final_report.proto";
 import "affinity.proto";
+import "tolerations.proto";
 
 // TaskDescriptor describes a task in firmament scheduler.
 message TaskDescriptor {
@@ -104,4 +105,6 @@ message TaskDescriptor {
   repeated LabelSelector label_selectors = 33;
   //Affinity
   Affinity affinity = 34;
+  //Toleration
+  repeated Toleration toleration = 35;
 }
