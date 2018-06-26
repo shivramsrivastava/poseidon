@@ -189,3 +189,12 @@ type PodWatcher struct {
 	controller   cache.Controller
 	fc           firmament.FirmamentSchedulerClient
 }
+
+// BindInfo
+type BindInfo struct {
+	Name      string
+	Namespace string
+	Nodename  string
+}
+
+var BindChannel chan BindInfo
