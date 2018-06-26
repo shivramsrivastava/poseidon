@@ -360,6 +360,18 @@ func (pw *PodWatcher) podWorker() {
 				case PodPending:
 					glog.V(2).Info("PodPending ", pod.Identifier)
 					PodMux.Lock()
+					// check if the pod already exists
+					// this cases happend when Replicaset are used.
+					// When a replicaset is delete it creates more pods with the same name
+
+					_, ok := PodToTD[pod.Identifier]
+					if ok {
+						// we ignore this since the pod already exists
+						// release the lock
+						glog.Infof("Pod already added", pod.Identifier.Name, pod.Identifier.Namespace)
+						PodMux.Unlock()
+						continue
+					}
 					jobID := pw.generateJobID(pod.OwnerRef)
 					jd, ok := jobIDToJD[jobID]
 					if !ok {

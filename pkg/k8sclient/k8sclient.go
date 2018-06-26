@@ -49,6 +49,7 @@ func BindPodToNode() {
 			glog.Infof("Could not bind pod:%s to nodeName:%s, error: %v", bindInfo.Name, bindInfo.Nodename, err)
 			// push back to the channel
 			BindChannel <- bindInfo
+			time.Sleep(1 * time.Second)
 		}
 	}
 }
