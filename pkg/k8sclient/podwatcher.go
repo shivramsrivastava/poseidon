@@ -394,7 +394,13 @@ func (pw *PodWatcher) podWorker() {
 						}
 						PodMux.Unlock()
 						metrics.SchedulingSubmitmLatency.Observe(metrics.SinceInMicroseconds(time.Time(pod.CreateTimeStamp.Time)))
-						firmament.TaskSubmitted(pw.fc, taskDescription)
+						res, _ := firmament.TaskSubmitted(pw.fc, taskDescription)
+						switch res.Type {
+						case firmament.TaskReplyType_TASK_ALREADY_SUBMITTED:
+							glog.Infoln("Error: pod ", TaskIDToPod[td.Uid], " already submitted with task id ", td.Uid)
+						case firmament.TaskReplyType_TASK_SUBMITTED_OK:
+							glog.Infoln("pod ", TaskIDToPod[td.Uid], " submitted first time with Task id ", td.Uid)
+						}
 					case PodSucceeded:
 						glog.V(2).Info("PodSucceeded ", pod.Identifier)
 						PodMux.RLock()
