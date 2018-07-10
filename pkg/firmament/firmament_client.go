@@ -86,22 +86,20 @@ func TaskRemoved(client FirmamentSchedulerClient, tuid *TaskUID) {
 }
 
 // TaskSubmitted tells firmament server the given task is submitted.
-func TaskSubmitted(client FirmamentSchedulerClient, td *TaskDescription) (*TaskSubmittedResponse, error) {
+func TaskSubmitted(client FirmamentSchedulerClient, td *TaskDescription) {
 	tSubmittedResp, err := client.TaskSubmitted(context.Background(), td)
 	if err != nil {
 		grpclog.Fatalf("%v.TaskSubmitted(_) = _, %v: ", client, err)
 	}
 	switch tSubmittedResp.Type {
 	case TaskReplyType_TASK_ALREADY_SUBMITTED:
-		glog.Infof("Task (%s,%d) already submitted", td.JobDescriptor.Uuid, td.TaskDescriptor.Uid)
+		glog.Fatalf("Task (%s,%d) already submitted", td.JobDescriptor.Uuid, td.TaskDescriptor.Uid)
 	case TaskReplyType_TASK_STATE_NOT_CREATED:
 		glog.Fatalf("Task (%s,%d) not in created state", td.JobDescriptor.Uuid, td.TaskDescriptor.Uid)
 	case TaskReplyType_TASK_SUBMITTED_OK:
 	default:
 		panic(fmt.Sprintf("Unexpected TaskSubmitted response %v for task (%v,%v)", tSubmittedResp, td.JobDescriptor.Uuid, td.TaskDescriptor.Uid))
 	}
-
-	return tSubmittedResp, err
 }
 
 // TaskUpdated tells firmament server the given task is updated.
