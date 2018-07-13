@@ -36,7 +36,7 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/pkg/client/conditions"
 	"k8s.io/kubernetes/pkg/controller"
-	taintutils "k8s.io/kubernetes/pkg/util/taints"
+//	taintutils "k8s.io/kubernetes/pkg/util/taints"
 )
 
 const (
@@ -474,6 +474,16 @@ func AddOrUpdateTaintOnNode(c clientset.Interface, nodeName string, taint v1.Tai
 	ExpectNoError(controller.AddOrUpdateTaintOnNode(c, nodeName, &taint))
 }
 
+// TaintExists checks if the given taint exists in list of taints. Returns true if exists false otherwise.
+func TaintExists(taints []v1.Taint, taintToFind *v1.Taint) bool {
+	for _, taint := range taints {
+		if taint.MatchTaint(taintToFind) {
+			return true
+		}
+	}
+	return false
+}
+
 func NodeHasTaint(c clientset.Interface, nodeName string, taint *v1.Taint) (bool, error) {
 	node, err := c.CoreV1().Nodes().Get(nodeName, metav1.GetOptions{})
 	if err != nil {
@@ -482,7 +492,7 @@ func NodeHasTaint(c clientset.Interface, nodeName string, taint *v1.Taint) (bool
 
 	nodeTaints := node.Spec.Taints
 
-	if len(nodeTaints) == 0 || !taintutils.TaintExists(nodeTaints, taint) {
+	if len(nodeTaints) == 0 || !TaintExists(nodeTaints, taint) {
 		return false, nil
 	}
 	return true, nil
@@ -505,7 +515,7 @@ func VerifyThatTaintIsGone(c clientset.Interface, nodeName string, taint *v1.Tai
 	By("verifying the node doesn't have the taint " + taint.ToString())
 	nodeUpdated, err := c.CoreV1().Nodes().Get(nodeName, metav1.GetOptions{})
 	ExpectNoError(err)
-	if taintutils.TaintExists(nodeUpdated.Spec.Taints, taint) {
+	if TaintExists(nodeUpdated.Spec.Taints, taint) {
 		Failf("Failed removing taint " + taint.ToString() + " of the node " + nodeName)
 	}
 }
