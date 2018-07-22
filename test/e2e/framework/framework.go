@@ -141,7 +141,7 @@ func (f *Framework) BeforeEach() {
 	f.Namespace, err = f.createNamespace(f.ClientSet)
 	Expect(err).NotTo(HaveOccurred())
 
-	Logf("After name space creation %v", f.Namespace)
+	Logf("After namespace creation %v", f.Namespace)
 
 	err = f.CreateFirmament()
 	Expect(err).NotTo(HaveOccurred())
@@ -332,7 +332,7 @@ func (f *Framework) createFirmamentDeployment() (*v1beta1.Deployment, error) {
 					Containers: []v1.Container{
 						{
 							Name:    "firmament-scheduler",
-							Image:   "huaweifirmament/firmament:latest",
+							Image:   "huaweifirmament/firmament:taint_e2e",
 							Command: []string{"/firmament/build/src/firmament_scheduler", "--flagfile=/firmament/config/firmament_scheduler_cpu_mem.cfg"},
 							Ports:   []v1.ContainerPort{{ContainerPort: 9090}},
 						},
