@@ -1563,7 +1563,7 @@ var _ = Describe("Poseidon", func() {
 			framework.ExpectNoError(framework.WaitForPodNotPending(clientset, ns, labelPodName))
 			labelPod, err := clientset.CoreV1().Pods(ns).Get(labelPodName, metav1.GetOptions{})
 			framework.ExpectNoError(err)
-			Expect(labelPod.Spec.NodeName).To(Equal(nodeTwo.Name))
+			Expect(labelPod.Spec.NodeName).NotTo(Equal(nodeOne.Name))
 
 			By(fmt.Sprintf("Remove the taint from %s", nodeOne.Name))
 			framework.RemoveTaintOffNode(clientset, nodeOne.Name, taint)
@@ -1616,7 +1616,7 @@ var _ = Describe("Poseidon", func() {
 			framework.ExpectNoError(framework.WaitForPodNotPending(clientset, ns, labelPodName))
 			labelPod, err := clientset.CoreV1().Pods(ns).Get(labelPodName, metav1.GetOptions{})
 			framework.ExpectNoError(err)
-			Expect(labelPod.Spec.NodeName).To(Equal(nodeTwo.Name))
+			Expect(labelPod.Spec.NodeName).NotTo(Equal(nodeOne.Name))
 
 			By(fmt.Sprintf("Remove the taint from %s", nodeOne.Name))
 			framework.RemoveTaintOffNode(clientset, nodeOne.Name, taint)
