@@ -1519,7 +1519,11 @@ var _ = Describe("Poseidon", func() {
 			framework.ExpectNoError(framework.WaitForPodNotPending(clientset, ns, labelPodName))
 			labelPod, err := clientset.CoreV1().Pods(ns).Get(labelPodName, metav1.GetOptions{})
 			framework.ExpectNoError(err)
-			Expect(labelPod.Spec.NodeName).To(Equal(setupPodTwosNodeName))
+			if setupPodTwosNodeName == setupPodOnesNodeName {
+				Expect(labelPod.Spec.NodeName).NotTo(Equal(setupPodTwosNodeName))
+			}else {
+				Expect(labelPod.Spec.NodeName).To(Equal(setupPodTwosNodeName))
+			}
 
 			By("Delete the test pod")
 			err = clientset.CoreV1().Pods(ns).Delete(labelPod.Name, &metav1.DeleteOptions{})
