@@ -1537,6 +1537,18 @@ var _ = Describe("Poseidon", func() {
 			testpod := testPodConfig{
 				Name:          labelPodName,
 				SchedulerName: "poseidon",
+				Tolerations: []v1.Toleration{
+					{
+						Key:      "node.alpha.kubernetes.io/unreachable",
+						Operator: "Exists",
+						Effect:   "NoExecute",
+					},
+					{
+						Key:      "node.kubernetes.io/not-ready",
+						Operator: "Exists",
+						Effect:   "NoExecute",
+					},
+				},
 			}
 
 			By("Trying to get a schedulable node")
@@ -1587,6 +1599,16 @@ var _ = Describe("Poseidon", func() {
 						Operator: "Equal",
 						Value:    "bar",
 						Effect:   "PreferNoSchedule",
+					},
+					{
+						Key:      "node.alpha.kubernetes.io/unreachable",
+						Operator: "Exists",
+						Effect:   "NoExecute",
+					},
+					{
+						Key:      "node.kubernetes.io/not-ready",
+						Operator: "Exists",
+						Effect:   "NoExecute",
 					},
 				},
 				SchedulerName: "poseidon",

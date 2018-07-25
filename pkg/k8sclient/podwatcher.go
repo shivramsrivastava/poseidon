@@ -520,6 +520,7 @@ func (pw *PodWatcher) addTaskToJob(pod *Pod, jd *firmament.JobDescriptor) *firma
 				Operator: tolerations.Operator,
 				Effect:   tolerations.Effect,
 			})
+		fmt.Println(tolerations)
 	}
 	// Get the network requirement from pods label, and set it in ResourceRequest of the TaskDescriptor
 	setTaskNetworkRequirement(task, pod.Labels)
