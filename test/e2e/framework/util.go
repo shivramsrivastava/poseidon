@@ -485,15 +485,23 @@ func TaintExists(taints []v1.Taint, taintToFind *v1.Taint) bool {
 }
 
 func NodeHasTaint(c clientset.Interface, nodeName string, taint *v1.Taint) (bool, error) {
-	node, err := c.CoreV1().Nodes().Get(nodeName, metav1.GetOptions{})
-	if err != nil {
+
+	// wait for namespace to delete or timeout.
+	err := wait.PollImmediate(5*time.Second, 5*time.Minute, func() (bool, error) {
+		node, err := c.CoreV1().Nodes().Get(nodeName, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		nodeTaints := node.Spec.Taints
+
+		if len(nodeTaints) == 0 || !taintutils.TaintExists(nodeTaints, taint) {
+			return false, nil
+		}
+		return true, nil
+	})
+
+	if apierrs.IsTimeout(err) || apierrs.IsNotFound(err) {
 		return false, err
-	}
-
-	nodeTaints := node.Spec.Taints
-
-	if len(nodeTaints) == 0 || !taintutils.TaintExists(nodeTaints, taint) {
-		return false, nil
 	}
 	return true, nil
 }
@@ -513,9 +521,21 @@ func RemoveTaintOffNode(c clientset.Interface, nodeName string, taint v1.Taint) 
 
 func VerifyThatTaintIsGone(c clientset.Interface, nodeName string, taint *v1.Taint) {
 	By("verifying the node doesn't have the taint " + taint.ToString())
-	nodeUpdated, err := c.CoreV1().Nodes().Get(nodeName, metav1.GetOptions{})
-	ExpectNoError(err)
-	if taintutils.TaintExists(nodeUpdated.Spec.Taints, taint) {
-		Failf("Failed removing taint " + taint.ToString() + " of the node " + nodeName)
+
+	err := wait.PollImmediate(5*time.Second, 5*time.Minute, func() (bool, error) {
+		nodeUpdated, err := c.CoreV1().Nodes().Get(nodeName, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		if taintutils.TaintExists(nodeUpdated.Spec.Taints, taint) {
+			return false, nil
+		}
+		return true, nil
+	})
+
+	if apierrs.IsTimeout(err) || apierrs.IsNotFound(err) {
+		Logf("%v taint not removed from the node %v", taint, nodeName)
+		return
 	}
+	Logf("%v taint completely removed from the node %v", taint, nodeName)
 }
