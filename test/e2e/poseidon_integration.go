@@ -29,7 +29,7 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	//	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"time"
@@ -294,7 +294,7 @@ var _ = Describe("Poseidon", func() {
 		})
 	})
 
-	/*Describe("Poseidon [Predicates]", func() {
+	Describe("Poseidon [Predicates]", func() {
 		// This test verifies we don't allow scheduling of pods in a way that sum of
 		// limits of pods is greater than machines capacity.
 		// It assumes that cluster add-on pods stay stable and cannot be run in parallel
@@ -1531,7 +1531,7 @@ var _ = Describe("Poseidon", func() {
 			err = f.WaitForPodNotFound(labelPodName, 2*time.Minute)
 			Expect(err).NotTo(HaveOccurred())
 		})
-	})*/
+	})
 
 	Describe("Poseidon [Taints and Tolerations hard and soft constraint]", func() {
 		var nodeOne, nodeTwo v1.Node
