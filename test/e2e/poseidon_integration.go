@@ -1519,7 +1519,6 @@ var _ = Describe("Poseidon", func() {
 			framework.ExpectNoError(framework.WaitForPodNotPending(clientset, ns, labelPodName))
 			labelPod, err := clientset.CoreV1().Pods(ns).Get(labelPodName, metav1.GetOptions{})
 			framework.ExpectNoError(err)
-
 			if setupPodTwosNodeName == setupPodOnesNodeName {
 				Expect(labelPod.Spec.NodeName).NotTo(Equal(setupPodTwosNodeName))
 			} else {
