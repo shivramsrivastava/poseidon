@@ -91,6 +91,7 @@ func TaskSubmitted(client FirmamentSchedulerClient, td *TaskDescription) {
 	if err != nil {
 		grpclog.Fatalf("%v.TaskSubmitted(_) = _, %v: ", client, err)
 	}
+	glog.Infof("\t Task Submitted")
 	switch tSubmittedResp.Type {
 	case TaskReplyType_TASK_ALREADY_SUBMITTED:
 		glog.Fatalf("Task (%s,%d) already submitted", td.JobDescriptor.Uuid, td.TaskDescriptor.Uid)

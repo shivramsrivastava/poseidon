@@ -80,16 +80,6 @@ func NewPodWatcher(kubeVerMajor, kubeVerMinor int, schedulerName string, client 
 	}
 	schedulerSelector := fields.Everything()
 	podSelector := labels.Everything()
-	if kubeVerMajor >= 1 && kubeVerMinor >= 6 {
-		// schedulerName is only available in Kubernetes >= 1.6.
-		schedulerSelector = fields.ParseSelectorOrDie("spec.schedulerName==" + schedulerName)
-	} else {
-		var err error
-		podSelector, err = labels.Parse("scheduler in (" + schedulerName + ")")
-		if err != nil {
-			glog.Fatal("Failed to parse scheduler label selector")
-		}
-	}
 	_, controller := cache.NewInformer(
 		&cache.ListWatch{
 			ListFunc: func(alo metav1.ListOptions) (runtime.Object, error) {
@@ -111,21 +101,40 @@ func NewPodWatcher(kubeVerMajor, kubeVerMinor int, schedulerName string, client 
 				if err != nil {
 					glog.Errorf("AddFunc: error getting key %v", err)
 				}
-				podWatcher.enqueuePodAddition(key, obj)
+				//podWatcher.enqueuePodAddition(key, obj)
+				   pod := obj.(*v1.Pod)
+                               if pod.Namespace != "kube-system" {
+                                       podWatcher.enqueuePodAddition(key, obj)
+                               }else{
+                                       if pod.Status.Phase == v1.PodPending{
+                                               podWatcher.enqueuePodAddition(key, obj)
+                                       }
+                               }
+
 			},
 			UpdateFunc: func(old, new interface{}) {
 				key, err := cache.MetaNamespaceKeyFunc(new)
 				if err != nil {
 					glog.Errorf("UpdateFunc: error getting key %v", err)
 				}
-				podWatcher.enqueuePodUpdate(key, old, new)
+				//podWatcher.enqueuePodUpdate(key, old, new)
+				 pod := new.(*v1.Pod)
+                                if pod.Namespace != "kube-system" {
+                                       podWatcher.enqueuePodUpdate(key, old, new)
+                               }
+
 			},
 			DeleteFunc: func(obj interface{}) {
 				key, err := cache.MetaNamespaceKeyFunc(obj)
 				if err != nil {
 					glog.Errorf("DeleteFunc: error getting key %v", err)
 				}
-				podWatcher.enqueuePodDeletion(key, obj)
+				//podWatcher.enqueuePodDeletion(key, obj)
+				pod := obj.(*v1.Pod) 
+                               if pod.Namespace != "kube-system" { 
+                                       podWatcher.enqueuePodDeletion(key, obj)
+                               }
+
 			},
 		},
 	)
@@ -425,6 +434,7 @@ func (pw *PodWatcher) podWorker() {
 						}
 						// TODO(jiaxuanzhou) need to metric the task remove latency ?
 						firmament.TaskRemoved(pw.fc, &firmament.TaskUID{TaskUid: td.Uid})
+						fmt.Println("Deletion Task Id: ",td.Uid)
 						PodMux.Lock()
 						delete(PodToTD, pod.Identifier)
 						delete(TaskIDToPod, td.GetUid())
@@ -445,6 +455,7 @@ func (pw *PodWatcher) podWorker() {
 						if !ok {
 							glog.Fatalf("Pod %s does not exist", pod.Identifier)
 						}
+						fmt.Println("Failed Task Id: ",td.Uid)
 						firmament.TaskFailed(pw.fc, &firmament.TaskUID{TaskUid: td.Uid})
 					case PodRunning:
 						glog.V(2).Info("PodRunning ", pod.Identifier)

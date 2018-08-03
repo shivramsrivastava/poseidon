@@ -9,12 +9,9 @@ spec:
       tier: frontend
   template:
     metadata:
-      annotations:
-        "scheduler.alpha.kubernetes.io/name": poseidon
       name: nginx-replica-set
       labels:
         tier: frontend
-        scheduler: poseidon
     spec:
       containers:
         - name: nginx
