@@ -18,6 +18,7 @@ package k8sclient
 
 import (
 	"sync"
+	"time"
 
 	"github.com/kubernetes-sigs/poseidon/pkg/firmament"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -239,9 +240,11 @@ type PodWatcher struct {
 
 // BindInfo
 type BindInfo struct {
-	Name      string
-	Namespace string
-	Nodename  string
+	Name             string
+	Namespace        string
+	Nodename         string
+	RetryCount       int64     // max 5 retries
+	FirstFailureTime time.Time // each retry we add 5 sec delay
 }
 
 var BindChannel chan BindInfo
