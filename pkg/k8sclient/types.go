@@ -244,7 +244,7 @@ type BindInfo struct {
 	Namespace        string
 	Nodename         string
 	RetryCount       int64     // max 5 retries
-	FirstFailureTime time.Time // each retry we add 5 sec delay
+	FirstFailureTime time.Time //
 }
 
 var BindChannel chan BindInfo
