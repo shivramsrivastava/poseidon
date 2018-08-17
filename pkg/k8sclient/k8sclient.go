@@ -36,52 +36,18 @@ var clientSet kubernetes.Interface
 func BindPodToNode() {
 	for {
 		bindInfo := <-BindChannel
-		if bindInfo.RetryCount == 0 {
-			err := clientSet.CoreV1().Pods(bindInfo.Namespace).Bind(&v1.Binding{
-				TypeMeta: meta_v1.TypeMeta{},
-				ObjectMeta: meta_v1.ObjectMeta{
-					Name: bindInfo.Name,
-				},
-				Target: v1.ObjectReference{
-					Namespace: bindInfo.Namespace,
-					Name:      bindInfo.Nodename,
-				}})
-			if err != nil {
-				glog.Infof("Could not bind pod:%s to nodeName:%s, error: %v", bindInfo.Name, bindInfo.Nodename, err)
-				// push back to the channel
-				bindInfo.RetryCount = bindInfo.RetryCount + 1
-				bindInfo.FirstFailureTime = time.Now()
-				time.Sleep(2 * time.Second)
-				BindChannel <- bindInfo
-			}
-		} else {
-			if time.Now().After(bindInfo.FirstFailureTime.Add(time.Second*time.Duration(5*bindInfo.RetryCount))) && bindInfo.RetryCount <= 5 {
-				err := clientSet.CoreV1().Pods(bindInfo.Namespace).Bind(&v1.Binding{
-					TypeMeta: meta_v1.TypeMeta{},
-					ObjectMeta: meta_v1.ObjectMeta{
-						Name: bindInfo.Name,
-					},
-					Target: v1.ObjectReference{
-						Namespace: bindInfo.Namespace,
-						Name:      bindInfo.Nodename,
-					}})
-				if err != nil {
-					glog.Infof("Could not bind pod:%s to nodeName:%s, error: %v", bindInfo.Name, bindInfo.Nodename, err)
-					// push back to the channel
-					bindInfo.RetryCount = bindInfo.RetryCount + 1
-					time.Sleep(2 * time.Second)
-					BindChannel <- bindInfo
-				}
-
-			} else {
-				if bindInfo.RetryCount <= 5 {
-					time.Sleep(2 * time.Second)
-					BindChannel <- bindInfo
-				}
-			}
-
+		err := clientSet.CoreV1().Pods(bindInfo.Namespace).Bind(&v1.Binding{
+			TypeMeta: meta_v1.TypeMeta{},
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: bindInfo.Name,
+			},
+			Target: v1.ObjectReference{
+				Namespace: bindInfo.Namespace,
+				Name:      bindInfo.Nodename,
+			}})
+		if err != nil {
+			glog.Errorf("Could not bind pod:%s to nodeName:%s, error: %v", bindInfo.Name, bindInfo.Nodename, err)
 		}
-
 	}
 }
 

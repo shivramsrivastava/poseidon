@@ -40,7 +40,7 @@ func schedule(fc firmament.FirmamentSchedulerClient) {
 
 	stopCh := make(chan struct{})
 	// start the bond od wokers
-	go k8sclient.BindPodWorkers(stopCh, 500)
+	go k8sclient.BindPodWorkers(stopCh, config.GetBurst())
 	for {
 		deltas := firmament.Schedule(fc)
 

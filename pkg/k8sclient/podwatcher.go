@@ -405,6 +405,7 @@ func (pw *PodWatcher) podWorker() {
 					case PodPending:
 						glog.V(2).Info("PodPending ", pod.Identifier)
 						PodMux.Lock()
+
 						// check if the pod already exists
 						// this cases happend when Replicaset are used.
 						// When a replicaset is delete it creates more pods with the same name
