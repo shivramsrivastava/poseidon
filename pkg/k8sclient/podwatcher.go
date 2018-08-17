@@ -68,7 +68,7 @@ func SortNodeSelectorsKey(nodeSelector NodeSelectors) []string {
 
 // NewPodWatcher initialize a PodWatcher.
 func NewPodWatcher(kubeVerMajor, kubeVerMinor int, schedulerName string, client kubernetes.Interface, fc firmament.FirmamentSchedulerClient) *PodWatcher {
-	glog.Info("Starting PodWatcher...")
+	glog.V(2).Info("Starting PodWatcher...")
 	PodMux = new(sync.RWMutex)
 	PodToTD = make(map[PodIdentifier]*firmament.TaskDescriptor)
 	TaskIDToPod = make(map[uint64]PodIdentifier)
@@ -102,14 +102,16 @@ func NewPodWatcher(kubeVerMajor, kubeVerMinor int, schedulerName string, client 
 					glog.Errorf("AddFunc: error getting key %v", err)
 				}
 				//podWatcher.enqueuePodAddition(key, obj)
-				   pod := obj.(*v1.Pod)
-                               if pod.Namespace != "kube-system" {
-                                       podWatcher.enqueuePodAddition(key, obj)
-                               }else{
-                                       if pod.Status.Phase == v1.PodPending{
-                                               podWatcher.enqueuePodAddition(key, obj)
-                                       }
-                               }
+				pod := obj.(*v1.Pod)
+				if pod.Spec.NodeName == "" {
+					if pod.Namespace != "kube-system" {
+						podWatcher.enqueuePodAddition(key, obj)
+					} else {
+						if pod.Status.Phase == v1.PodPending {
+							podWatcher.enqueuePodAddition(key, obj)
+						}
+					}
+				}
 
 			},
 			UpdateFunc: func(old, new interface{}) {
@@ -118,10 +120,10 @@ func NewPodWatcher(kubeVerMajor, kubeVerMinor int, schedulerName string, client 
 					glog.Errorf("UpdateFunc: error getting key %v", err)
 				}
 				//podWatcher.enqueuePodUpdate(key, old, new)
-				 pod := new.(*v1.Pod)
-                                if pod.Namespace != "kube-system" {
-                                       podWatcher.enqueuePodUpdate(key, old, new)
-                               }
+				pod := new.(*v1.Pod)
+				if pod.Namespace != "kube-system" && pod.Spec.NodeName == "" {
+					podWatcher.enqueuePodUpdate(key, old, new)
+				}
 
 			},
 			DeleteFunc: func(obj interface{}) {
@@ -130,10 +132,10 @@ func NewPodWatcher(kubeVerMajor, kubeVerMinor int, schedulerName string, client 
 					glog.Errorf("DeleteFunc: error getting key %v", err)
 				}
 				//podWatcher.enqueuePodDeletion(key, obj)
-				pod := obj.(*v1.Pod) 
-                               if pod.Namespace != "kube-system" { 
-                                       podWatcher.enqueuePodDeletion(key, obj)
-                               }
+				pod := obj.(*v1.Pod)
+				if pod.Namespace != "kube-system" && pod.Spec.NodeName == "" {
+					podWatcher.enqueuePodDeletion(key, obj)
+				}
 
 			},
 		},
@@ -248,6 +250,12 @@ func (pw *PodWatcher) getTolerations(pod *v1.Pod) []Toleration {
 }
 
 func (pw *PodWatcher) parsePod(pod *v1.Pod) *Pod {
+
+	// TODO(nikita): to be removed
+	if pod.Spec.SchedulerName == "" {
+		glog.Info("parsePod: We dont process this pod ", pod.Name, " this is to be scheduled by ", pod.Spec.SchedulerName)
+		return nil
+	}
 	cpuReq, memReq := pw.getCPUMemRequest(pod)
 	podPhase := PodUnknown
 	switch pod.Status.Phase {
@@ -295,13 +303,18 @@ func (pw *PodWatcher) parsePod(pod *v1.Pod) *Pod {
 
 func (pw *PodWatcher) enqueuePodAddition(key interface{}, obj interface{}) {
 	pod := obj.(*v1.Pod)
-	addedPod := pw.parsePod(pod)
-	pw.podWorkQueue.Add(key, addedPod)
-	glog.Info("enqueuePodAddition: Added pod ", addedPod.Identifier)
+	if addedPod := pw.parsePod(pod); addedPod != nil {
+		pw.podWorkQueue.Add(key, addedPod)
+		glog.V(2).Info("enqueuePodAddition: Added pod ", addedPod.Identifier)
+	}
 }
 
 func (pw *PodWatcher) enqueuePodDeletion(key interface{}, obj interface{}) {
 	pod := obj.(*v1.Pod)
+	if pod.Spec.SchedulerName == "" {
+		glog.Info("enqueuePodDeletion: We dont process this pod ", pod.Name, " this is to be scheduled by ", pod.Spec.SchedulerName)
+		return
+	}
 	if pod.DeletionTimestamp != nil {
 		// Only delete pods if they have a DeletionTimestamp.
 		deletedPod := &Pod{
@@ -313,7 +326,7 @@ func (pw *PodWatcher) enqueuePodDeletion(key interface{}, obj interface{}) {
 			OwnerRef: GetOwnerReference(pod),
 		}
 		pw.podWorkQueue.Add(key, deletedPod)
-		glog.Info("enqueuePodDeletion: Added pod ", deletedPod.Identifier)
+		glog.V(2).Info("enqueuePodDeletion: Added pod ", deletedPod.Identifier)
 	}
 }
 
@@ -322,9 +335,10 @@ func (pw *PodWatcher) enqueuePodUpdate(key, oldObj, newObj interface{}) {
 	newPod := newObj.(*v1.Pod)
 	if oldPod.Status.Phase != newPod.Status.Phase {
 		// TODO(ionel): pw code assumes that if other fields changed as well then Firmament will automatically update them upon state transition. pw is currently not true.
-		updatedPod := pw.parsePod(newPod)
-		pw.podWorkQueue.Add(key, updatedPod)
-		glog.Infof("enqueuePodUpdate: Updated pod state change %v %s", updatedPod.Identifier, updatedPod.State)
+		if updatedPod := pw.parsePod(newPod); updatedPod != nil {
+			pw.podWorkQueue.Add(key, updatedPod)
+			glog.V(2).Infof("enqueuePodUpdate: Updated pod state change %v %s", updatedPod.Identifier, updatedPod.State)
+		}
 		return
 	}
 	oldCPUReq, oldMemReq := pw.getCPUMemRequest(oldPod)
@@ -333,11 +347,12 @@ func (pw *PodWatcher) enqueuePodUpdate(key, oldObj, newObj interface{}) {
 		!reflect.DeepEqual(oldPod.Labels, newPod.Labels) ||
 		!reflect.DeepEqual(oldPod.Annotations, newPod.Annotations) ||
 		!reflect.DeepEqual(oldPod.Spec.NodeSelector, newPod.Spec.NodeSelector) {
-		updatedPod := pw.parsePod(newPod)
-		// we need to change the state here
-		updatedPod.State = PodUpdated
-		pw.podWorkQueue.Add(key, updatedPod)
-		glog.Info("enqueuePodUpdate: Updated pod ", updatedPod.Identifier)
+		if updatedPod := pw.parsePod(newPod); updatedPod != nil {
+			// we need to change the state here
+			updatedPod.State = PodUpdated
+			pw.podWorkQueue.Add(key, updatedPod)
+			glog.V(2).Infof("enqueuePodUpdate: Updated pod ", updatedPod.Identifier)
+		}
 		return
 	}
 }
@@ -348,8 +363,8 @@ func (pw *PodWatcher) Run(stopCh <-chan struct{}, nWorkers int) {
 
 	// The workers can stop when we are done.
 	defer pw.podWorkQueue.ShutDown()
-	defer glog.Info("Shutting down PodWatcher")
-	glog.Info("Getting pod updates...")
+	defer glog.V(2).Info("Shutting down PodWatcher")
+	glog.V(2).Info("Getting pod updates...")
 
 	go pw.controller.Run(stopCh)
 
@@ -358,27 +373,32 @@ func (pw *PodWatcher) Run(stopCh <-chan struct{}, nWorkers int) {
 		return
 	}
 
-	glog.Info("Starting pod watching workers")
+	glog.V(2).Info("Starting pod watching workers")
 	for i := 0; i < nWorkers; i++ {
 		go wait.Until(pw.podWorker, time.Second, stopCh)
 	}
 
 	<-stopCh
-	glog.Info("Stopping pod watcher")
+	glog.V(2).Info("Stopping pod watcher")
 }
 
 func (pw *PodWatcher) podWorker() {
-	for {
-		func() {
-			wg := new(sync.WaitGroup)
-			defer wg.Wait()
+	func() {
+		wg := new(sync.WaitGroup)
+		defer func() {
+			wg.Wait()
+		}()
+		for {
 			key, items, quit := pw.podWorkQueue.Get()
 			if quit {
 				return
 			}
 			wg.Add(1)
 			go func(key interface{}, items []interface{}, wg *sync.WaitGroup) {
-				defer wg.Done()
+				defer func() {
+					pw.podWorkQueue.Done(key)
+					wg.Done()
+				}()
 				for _, item := range items {
 					pod := item.(*Pod)
 					switch pod.State {
@@ -388,12 +408,11 @@ func (pw *PodWatcher) podWorker() {
 						// check if the pod already exists
 						// this cases happend when Replicaset are used.
 						// When a replicaset is delete it creates more pods with the same name
-
 						_, ok := PodToTD[pod.Identifier]
 						if ok {
 							// we ignore this since the pod already exists
 							// release the lock
-							glog.Infof("Pod already added", pod.Identifier.Name, pod.Identifier.Namespace)
+							glog.V(2).Info("Pod already added", pod.Identifier.Name, pod.Identifier.Namespace)
 							PodMux.Unlock()
 							continue
 						}
@@ -404,17 +423,24 @@ func (pw *PodWatcher) podWorker() {
 							jobIDToJD[jobID] = jd
 							jobNumTasksToRemove[jobID] = 0
 						}
-						td := pw.addTaskToJob(pod, jd)
 						jobNumTasksToRemove[jobID]++
+						taskCount := jobNumTasksToRemove[jobID]
+						PodMux.Unlock()
+						td := pw.addTaskToJob(pod, jd.Uuid, jd.Name, (taskCount))
+						PodMux.Lock()
+						// if taskCount is '1' it means root task, update the RootTask pointer in the JobDescriptor
+						if taskCount == 1 {
+							jd.RootTask = td
+						}
 						PodToTD[pod.Identifier] = td
 						TaskIDToPod[td.GetUid()] = pod.Identifier
 						taskDescription := &firmament.TaskDescription{
 							TaskDescriptor: td,
 							JobDescriptor:  jd,
 						}
+						PodMux.Unlock()
 						metrics.SchedulingSubmitmLatency.Observe(metrics.SinceInMicroseconds(time.Time(pod.CreateTimeStamp.Time)))
 						firmament.TaskSubmitted(pw.fc, taskDescription)
-						PodMux.Unlock()
 					case PodSucceeded:
 						glog.V(2).Info("PodSucceeded ", pod.Identifier)
 						PodMux.RLock()
@@ -434,7 +460,8 @@ func (pw *PodWatcher) podWorker() {
 						}
 						// TODO(jiaxuanzhou) need to metric the task remove latency ?
 						firmament.TaskRemoved(pw.fc, &firmament.TaskUID{TaskUid: td.Uid})
-						fmt.Println("Deletion Task Id: ",td.Uid)
+						//TODO(nikita): remove the print
+						fmt.Println("Deletion Task Id: ", td.Uid)
 						PodMux.Lock()
 						delete(PodToTD, pod.Identifier)
 						delete(TaskIDToPod, td.GetUid())
@@ -455,7 +482,8 @@ func (pw *PodWatcher) podWorker() {
 						if !ok {
 							glog.Fatalf("Pod %s does not exist", pod.Identifier)
 						}
-						fmt.Println("Failed Task Id: ",td.Uid)
+						//TODO(nikita): remove the print
+						fmt.Println("Failed Task Id: ", td.Uid)
 						firmament.TaskFailed(pw.fc, &firmament.TaskUID{TaskUid: td.Uid})
 					case PodRunning:
 						glog.V(2).Info("PodRunning ", pod.Identifier)
@@ -486,10 +514,9 @@ func (pw *PodWatcher) podWorker() {
 						glog.Fatalf("Pod %v in unexpected state %v", pod.Identifier, pod.State)
 					}
 				}
-				defer pw.podWorkQueue.Done(key)
 			}(key, items, wg)
-		}()
-	}
+		}
+	}()
 }
 
 func (pw *PodWatcher) createNewJob(jobName string) *firmament.JobDescriptor {
@@ -565,12 +592,12 @@ func (pw *PodWatcher) updateTask(pod *Pod, td *firmament.TaskDescriptor) {
 	}
 }
 
-func (pw *PodWatcher) addTaskToJob(pod *Pod, jd *firmament.JobDescriptor) *firmament.TaskDescriptor {
+func (pw *PodWatcher) addTaskToJob(pod *Pod, jdUid string, jdName string, tdID int) *firmament.TaskDescriptor {
 	task := &firmament.TaskDescriptor{
 		Name:      pod.Identifier.UniqueName(),
 		Namespace: pod.Identifier.Namespace,
 		State:     firmament.TaskDescriptor_CREATED,
-		JobId:     jd.Uuid,
+		JobId:     jdUid,
 		ResourceRequest: &firmament.ResourceVector{
 			// TODO(ionel): Update types so no cast is required.
 			CpuCores: float32(pod.CPURequest),
@@ -596,6 +623,7 @@ func (pw *PodWatcher) addTaskToJob(pod *Pod, jd *firmament.JobDescriptor) *firma
 				Operator: tolerations.Operator,
 				Effect:   tolerations.Effect,
 			})
+		//TODO(nikita): remove the print
 		fmt.Println(tolerations)
 	}
 	// Get the network requirement from pods label, and set it in ResourceRequest of the TaskDescriptor
@@ -637,14 +665,9 @@ func (pw *PodWatcher) addTaskToJob(pod *Pod, jd *firmament.JobDescriptor) *firma
 	}
 
 	setTaskType(task)
+	// No need to update the RootTask.Spawned here, it will be updated by firmament on processing the task submit call.
+	task.Uid = pw.generateTaskID(jdName, tdID)
 
-	if jd.RootTask == nil {
-		task.Uid = pw.generateTaskID(jd.Name, 0)
-		jd.RootTask = task
-	} else {
-		task.Uid = pw.generateTaskID(jd.Name, len(jd.RootTask.Spawned)+1)
-		jd.RootTask.Spawned = append(jd.RootTask.Spawned, task)
-	}
 	return task
 }
 
