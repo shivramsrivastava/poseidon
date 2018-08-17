@@ -93,6 +93,7 @@ func BuildPod(namespace, podName string,
 			UID:               types.UID(ownerRef),
 		},
 		Spec: v1.PodSpec{
+			SchedulerName: "Poseidon",
 			Containers: []v1.Container{
 				{
 					Resources: v1.ResourceRequirements{
