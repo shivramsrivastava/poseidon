@@ -142,6 +142,7 @@ func NewPodWatcher(kubeVerMajor, kubeVerMinor int, schedulerName string, client 
 	)
 	podWatcher.controller = controller
 	podWatcher.podWorkQueue = NewKeyedQueue()
+	go NewPoseidonEvents().ReceivePodInfo()
 	return podWatcher
 }
 
@@ -303,10 +304,17 @@ func (pw *PodWatcher) parsePod(pod *v1.Pod) *Pod {
 
 func (pw *PodWatcher) enqueuePodAddition(key interface{}, obj interface{}) {
 	pod := obj.(*v1.Pod)
-	if addedPod := pw.parsePod(pod); addedPod != nil {
-		pw.podWorkQueue.Add(key, addedPod)
-		glog.V(2).Info("enqueuePodAddition: Added pod ", addedPod.Identifier)
+	addedPod := pw.parsePod(pod)
+	pw.podWorkQueue.Add(key, addedPod)
+	// update the pod
+	PodToK8sPodLock.Lock()
+	identifier := PodIdentifier{
+		Name:      pod.Name,
+		Namespace: pod.Namespace,
 	}
+	PodToK8sPod[identifier] = pod.DeepCopy()
+	PodToK8sPodLock.Unlock()
+	glog.V(2).Info("enqueuePodAddition: Added pod ", addedPod.Identifier)
 }
 
 func (pw *PodWatcher) enqueuePodDeletion(key interface{}, obj interface{}) {
@@ -335,10 +343,18 @@ func (pw *PodWatcher) enqueuePodUpdate(key, oldObj, newObj interface{}) {
 	newPod := newObj.(*v1.Pod)
 	if oldPod.Status.Phase != newPod.Status.Phase {
 		// TODO(ionel): pw code assumes that if other fields changed as well then Firmament will automatically update them upon state transition. pw is currently not true.
-		if updatedPod := pw.parsePod(newPod); updatedPod != nil {
-			pw.podWorkQueue.Add(key, updatedPod)
-			glog.V(2).Infof("enqueuePodUpdate: Updated pod state change %v %s", updatedPod.Identifier, updatedPod.State)
+		updatedPod := pw.parsePod(newPod)
+		pw.podWorkQueue.Add(key, updatedPod)
+		glog.V(2).Infof("enqueuePodUpdate: Updated pod state change %v %s", updatedPod.Identifier, updatedPod.State)
+
+		// update the pod
+		PodToK8sPodLock.Lock()
+		identifier := PodIdentifier{
+			Name:      newPod.Name,
+			Namespace: newPod.Namespace,
 		}
+		PodToK8sPod[identifier] = newPod.DeepCopy()
+		PodToK8sPodLock.Unlock()
 		return
 	}
 	oldCPUReq, oldMemReq := pw.getCPUMemRequest(oldPod)
@@ -417,6 +433,7 @@ func (pw *PodWatcher) podWorker() {
 							PodMux.Unlock()
 							continue
 						}
+						PodPendingChan <- pod.Identifier // send the pod on the pending chan
 						jobID := pw.generateJobID(pod.OwnerRef)
 						jd, ok := jobIDToJD[jobID]
 						if !ok {
