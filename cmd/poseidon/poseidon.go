@@ -54,6 +54,7 @@ func schedule(fc firmament.FirmamentSchedulerClient) {
 				if !ok {
 					glog.Fatalf("Placed task %d without pod pairing", delta.GetTaskId())
 				}
+				k8sclient.PodSheduledChan <- podIdentifier
 				k8sclient.NodeMux.RLock()
 				nodeName, ok := k8sclient.ResIDToNode[delta.GetResourceId()]
 				k8sclient.NodeMux.RUnlock()
@@ -83,6 +84,8 @@ func schedule(fc firmament.FirmamentSchedulerClient) {
 				glog.Fatalf("Unexpected SchedulingDelta type %v", delta.GetType())
 			}
 		}
+		//here we call the function to recalulate the missing pods which are not being scheduled.
+		k8sclient.NewPoseidonEvents().RecalculateMissingPods()
 		// TODO(ionel): Temporary sleep statement because we currently call the scheduler even if there's no work do to.
 		time.Sleep(time.Duration(config.GetSchedulingInterval()) * time.Second)
 	}

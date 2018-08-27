@@ -27,6 +27,7 @@ import (
 	"github.com/golang/glog"
 	config2 "github.com/kubernetes-sigs/poseidon/pkg/config"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"sync"
 	"time"
 )
 
@@ -99,6 +100,10 @@ func New(schedulerName string, kubeConfig string, kubeVersionMajor, kubeVersionM
 
 func init() {
 	BindChannel = make(chan BindInfo, 1000)
+	PodPendingChan = make(chan PodIdentifier, 1000)
+	PodSheduledChan = make(chan PodIdentifier, 1000)
+	PodToK8sPodLock = new(sync.Mutex)
+	PodToK8sPod = make(map[PodIdentifier]*v1.Pod)
 }
 
 // Run starts a pod watcher.

@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	"github.com/kubernetes-sigs/poseidon/pkg/firmament"
+	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -245,3 +246,8 @@ type BindInfo struct {
 }
 
 var BindChannel chan BindInfo
+var PodPendingChan chan PodIdentifier  // newly added pods will be sent on this channel
+var PodSheduledChan chan PodIdentifier // scheduled pods will be sent on this channel
+// PodToTD maps Kubernetes pod identifier(namespace + name) to firmament task descriptor.
+var PodToK8sPod map[PodIdentifier]*v1.Pod
+var PodToK8sPodLock *sync.Mutex
