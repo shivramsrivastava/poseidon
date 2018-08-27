@@ -90,6 +90,9 @@ func (posiedonEvents *PoseidonEvents) ReceivePodInfo() {
 				} else {
 					//remove the pod after the message has been broadcasted
 					delete(posiedonEvents.podInfo, podIdentifier)
+					PodToK8sPodLock.Lock()
+					delete(PodToK8sPod, podIdentifier)
+					PodToK8sPodLock.Unlock()
 				}
 				posiedonEvents.Unlock()
 			}
@@ -103,6 +106,7 @@ func (posiedonEvents *PoseidonEvents) RecalculateMissingPods() {
 
 	posiedonEvents.Lock()
 	for podIdentifier, val := range posiedonEvents.podInfo {
+
 		if val > 2 {
 			PodToK8sPodLock.Lock()
 			// Note: accessing the below map PodToK8sPod without checking if the value exists
@@ -111,6 +115,7 @@ func (posiedonEvents *PoseidonEvents) RecalculateMissingPods() {
 			delete(posiedonEvents.podInfo, podIdentifier)
 			PodToK8sPodLock.Unlock()
 		}
+		posiedonEvents.podInfo[podIdentifier]++
 	}
 	posiedonEvents.Unlock()
 }
