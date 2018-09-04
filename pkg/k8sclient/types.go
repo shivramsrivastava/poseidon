@@ -117,6 +117,7 @@ const (
 type PodIdentifier struct {
 	Name      string
 	Namespace string
+	NodeName  string
 }
 
 // UniqueName returns pod namespace/name.

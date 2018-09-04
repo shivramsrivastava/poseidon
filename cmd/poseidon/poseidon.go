@@ -42,6 +42,7 @@ func schedule(fc firmament.FirmamentSchedulerClient) {
 	// start the bond od wokers
 	go k8sclient.BindPodWorkers(stopCh, config.GetBurst())
 	for {
+		glog.Infof("Blocking in schedule call")
 		deltas := firmament.Schedule(fc)
 
 		glog.Infof("Scheduler returned %d deltas", len(deltas.GetDeltas()))
@@ -54,9 +55,10 @@ func schedule(fc firmament.FirmamentSchedulerClient) {
 				if !ok {
 					glog.Fatalf("Placed task %d without pod pairing", delta.GetTaskId())
 				}
-				k8sclient.PodSheduledChan <- podIdentifier
 				k8sclient.NodeMux.RLock()
 				nodeName, ok := k8sclient.ResIDToNode[delta.GetResourceId()]
+				podIdentifier.NodeName = nodeName
+				k8sclient.PodSheduledChan <- podIdentifier
 				k8sclient.NodeMux.RUnlock()
 				if !ok {
 					glog.Fatalf("Placed task %d on resource %s without node pairing", delta.GetTaskId(), delta.GetResourceId())
@@ -85,7 +87,11 @@ func schedule(fc firmament.FirmamentSchedulerClient) {
 			}
 		}
 		//here we call the function to recalulate the missing pods which are not being scheduled.
-		k8sclient.NewPoseidonEvents().RecalculateMissingPods()
+		if k8sclient.ClientSet != nil {
+			k8sclient.NewPoseidonEvents(k8sclient.ClientSet).RecalculateMissingPods()
+		} else {
+			glog.Info("k8sclient is nil in the schedule method")
+		}
 		// TODO(ionel): Temporary sleep statement because we currently call the scheduler even if there's no work do to.
 		time.Sleep(time.Duration(config.GetSchedulingInterval()) * time.Second)
 	}
