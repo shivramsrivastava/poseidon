@@ -316,6 +316,21 @@ func (pw *PodWatcher) enqueuePodAddition(key interface{}, obj interface{}) {
 	PodToK8sPod[identifier] = pod.DeepCopy()
 	glog.Info("in the podaddtition ", identifier)
 	PodToK8sPodLock.Unlock()
+
+	// if the pod had volumes
+	// check for the bind volumes
+	if len(pod.Spec.Volumes) > 0 {
+		newPod := pod.DeepCopy()
+		newPod, ok := pw.getPVNodeAffinity(pod.Spec.Volumes, newPod)
+		if ok {
+			addedPod = pw.parsePod(newPod)
+		} else {
+			//Note: after we ignore this pod, the same pod we could get updated
+			// this case has to be handled
+			glog.Error("falied to find the mathing volumes to pod", addedPod)
+			return
+		}
+	}
 	pw.podWorkQueue.Add(key, addedPod)
 	glog.V(2).Info("enqueuePodAddition: Added pod ", addedPod.Identifier)
 }
@@ -890,4 +905,44 @@ func GetPodConditionFromList(conditions []v1.PodCondition, conditionType v1.PodC
 		}
 	}
 	return -1, nil
+
+}
+
+func (pw *PodWatcher) getPVNodeAffinity(volumes []v1.Volume, pod *v1.Pod) (*v1.Pod, bool) {
+
+	glog.Info("Before ", pod.Spec.Affinity.NodeAffinity)
+	for _, v := range volumes {
+		pvcName := v.PersistentVolumeClaim.ClaimName
+		pvc, err := pw.clientset.CoreV1().PersistentVolumeClaims(pod.Namespace).Get(pvcName, metav1.GetOptions{})
+
+		if err != nil {
+			glog.Error("Unable to reterive the PVc", err)
+			return nil, false
+		}
+		if pvc.Spec.VolumeName != "" {
+
+			pv, err := pw.clientset.CoreV1().PersistentVolumes().Get(pvc.Spec.VolumeName, metav1.GetOptions{})
+
+			if err != nil {
+				glog.Error("Unable to get PV called", pvc.Spec.VolumeName, err)
+				return nil, false
+			}
+
+			pvNodeSelector := pv.Spec.NodeAffinity.Required
+
+			podNodeAffinity := pod.Spec.Affinity.NodeAffinity
+			podNodeSelector := podNodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+			podNodeSelector.NodeSelectorTerms = append(podNodeSelector.NodeSelectorTerms, pvNodeSelector.NodeSelectorTerms...)
+			pod.Spec.Affinity.NodeAffinity = podNodeAffinity
+		} else {
+			// cannot find the right pv
+			glog.Error("Cannot schedule this pod since no matchin PV found", pod.Name)
+			return nil, false
+		}
+
+		glog.Info("After ", pod.Spec.Affinity.NodeAffinity)
+	}
+
+	return pod, true
+
 }
