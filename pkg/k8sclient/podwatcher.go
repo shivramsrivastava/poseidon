@@ -918,11 +918,11 @@ func (pw *PodWatcher) getPVNodeAffinity(volumes []v1.Volume, pod *v1.Pod) (*v1.P
 		glog.Info("Before ", pod.Spec.Affinity.NodeAffinity)
 	}
 	for _, v := range volumes {
-		glog.Info(v," PV claim name for pod", pod.Name)
-		if v.VolumeSource.PersistentVolumeClaim!=nil{
-			pvcName=v.VolumeSource.PersistentVolumeClaim.ClaimName
+		glog.Info(v, " PV claim name for pod", pod.Name)
+		if v.VolumeSource.PersistentVolumeClaim != nil {
+			pvcName = v.VolumeSource.PersistentVolumeClaim.ClaimName
 			glog.Info("PV claim name ", pvcName)
-		}else{
+		} else {
 			glog.Info("No pvc avaliable for this volume")
 			continue
 		}
@@ -954,7 +954,22 @@ func (pw *PodWatcher) getPVNodeAffinity(volumes []v1.Volume, pod *v1.Pod) (*v1.P
 				if podNodeAffinity != nil {
 					if podNodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
 						podNodeSelector := podNodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
-						podNodeSelector.NodeSelectorTerms = append(podNodeSelector.NodeSelectorTerms, pvNodeSelector.NodeSelectorTerms...)
+
+						// we check the len of the NodeSelectorTerms if >0 we attach our node selector requirement to the first
+						// Nodes
+						if len(podNodeSelector.NodeSelectorTerms) > 0 {
+							//get the first nodeselector term and update the match expression with our term
+							nodeSelectorTerm := podNodeSelector.NodeSelectorTerms[0]
+							for _, pvNodeSelector := range pvNodeSelector.NodeSelectorTerms {
+								//Note: we don't use the node fields terms
+								nodeSelectorTerm.MatchExpressions = append(nodeSelectorTerm.MatchExpressions, pvNodeSelector.MatchExpressions...)
+							}
+							podNodeSelector.NodeSelectorTerms[0]=nodeSelectorTerm
+							glog.Info(pod.Spec.Affinity.NodeAffinity)
+						} else {
+							//an impossible case
+							podNodeSelector.NodeSelectorTerms = append(podNodeSelector.NodeSelectorTerms, pvNodeSelector.NodeSelectorTerms...)
+						}
 					} else {
 						podNodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = &v1.NodeSelector{
 							NodeSelectorTerms: pvNodeSelector.NodeSelectorTerms,
