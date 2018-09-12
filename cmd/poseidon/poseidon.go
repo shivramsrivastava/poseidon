@@ -42,11 +42,9 @@ func schedule(fc firmament.FirmamentSchedulerClient) {
 	// start the bond od wokers
 	go k8sclient.BindPodWorkers(stopCh, config.GetBurst())
 	for {
-		glog.Infof("Blocking in schedule call")
 		deltas := firmament.Schedule(fc)
-
-		glog.Infof("Scheduler returned %d deltas", len(deltas.GetDeltas()))
 		for _, delta := range deltas.GetDeltas() {
+			glog.Infof("Scheduler returned %d deltas", len(deltas.GetDeltas()))
 			switch delta.GetType() {
 			case firmament.SchedulingDelta_PLACE:
 				k8sclient.PodMux.RLock()

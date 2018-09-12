@@ -131,7 +131,7 @@ func (posiedonEvents *PoseidonEvents) ReceivePodInfo() {
 					//remove the pod after the message has been broadcasted
 					posiedonEvents.podEvents.Recorder.Eventf(PodToK8sPod[mapAccesskey], corev1.EventTypeNormal, "Scheduled", "Successfully assigned %v/%v to %v", podIdentifier.Name, podIdentifier.Namespace, podIdentifier.NodeName)
 					glog.Info("Deleting after sending success event", podIdentifier, " from posiedonEvents map in ReceivePodInfo")
-					delete(posiedonEvents.podInfo, podIdentifier)
+					delete(posiedonEvents.podInfo, mapAccesskey)
 					//PodToK8sPodLock.Lock()
 					//delete(PodToK8sPod, podIdentifier)
 					//PodToK8sPodLock.Unlock()
@@ -145,8 +145,6 @@ func (posiedonEvents *PoseidonEvents) ReceivePodInfo() {
 
 // RecalulateMissingPods called after every schedule call
 func (posiedonEvents *PoseidonEvents) RecalculateMissingPods() {
-
-	glog.Info("RecalculateMissingPods called ")
 
 	posiedonEvents.Lock()
 	for podIdentifier, val := range posiedonEvents.podInfo {
