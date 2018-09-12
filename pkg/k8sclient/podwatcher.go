@@ -491,7 +491,8 @@ func (pw *PodWatcher) podWorker() {
 						td, ok := PodToTD[pod.Identifier]
 						PodMux.RUnlock()
 						if !ok {
-							glog.Fatalf("Pod %s does not exist", pod.Identifier)
+							glog.Infof("Pod %s does not exist", pod.Identifier)
+							continue
 						}
 						// TODO(jiaxuanzhou) need to metric the task remove latency ?
 						firmament.TaskRemoved(pw.fc, &firmament.TaskUID{TaskUid: td.Uid})
@@ -534,10 +535,12 @@ func (pw *PodWatcher) podWorker() {
 						td, okPod := PodToTD[pod.Identifier]
 						PodMux.Unlock()
 						if !okJob {
-							glog.Fatalf("Pod's %v job does not exist", pod.Identifier)
+							glog.Infof("Pod's %v job does not exist", pod.Identifier)
+							continue
 						}
 						if !okPod {
-							glog.Fatalf("Pod %v does not exist", pod.Identifier)
+							glog.Infof("Pod %v does not exist", pod.Identifier)
+							continue
 						}
 						pw.updateTask(pod, td)
 						taskDescription := &firmament.TaskDescription{
@@ -910,9 +913,19 @@ func GetPodConditionFromList(conditions []v1.PodCondition, conditionType v1.PodC
 
 func (pw *PodWatcher) getPVNodeAffinity(volumes []v1.Volume, pod *v1.Pod) (*v1.Pod, bool) {
 
-	glog.Info("Before ", pod.Spec.Affinity.NodeAffinity)
+	var pvcName string
+	if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil {
+		glog.Info("Before ", pod.Spec.Affinity.NodeAffinity)
+	}
 	for _, v := range volumes {
-		pvcName := v.PersistentVolumeClaim.ClaimName
+		glog.Info(v," PV claim name for pod", pod.Name)
+		if v.VolumeSource.PersistentVolumeClaim!=nil{
+			pvcName=v.VolumeSource.PersistentVolumeClaim.ClaimName
+			glog.Info("PV claim name ", pvcName)
+		}else{
+			glog.Info("No pvc avaliable for this volume")
+			continue
+		}
 		pvc, err := pw.clientset.CoreV1().PersistentVolumeClaims(pod.Namespace).Get(pvcName, metav1.GetOptions{})
 
 		if err != nil {
@@ -928,12 +941,40 @@ func (pw *PodWatcher) getPVNodeAffinity(volumes []v1.Volume, pod *v1.Pod) (*v1.P
 				return nil, false
 			}
 
-			pvNodeSelector := pv.Spec.NodeAffinity.Required
+			var pvNodeSelector *v1.NodeSelector
+			if pv.Spec.NodeAffinity != nil && pv.Spec.NodeAffinity.Required != nil {
+				pvNodeSelector = pv.Spec.NodeAffinity.Required
+			} else {
+				glog.Error("No matching node selecotr for PV found")
+				return nil, false
+			}
 
-			podNodeAffinity := pod.Spec.Affinity.NodeAffinity
-			podNodeSelector := podNodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
-			podNodeSelector.NodeSelectorTerms = append(podNodeSelector.NodeSelectorTerms, pvNodeSelector.NodeSelectorTerms...)
-			pod.Spec.Affinity.NodeAffinity = podNodeAffinity
+			if pod.Spec.Affinity != nil {
+				podNodeAffinity := pod.Spec.Affinity.NodeAffinity
+				if podNodeAffinity != nil {
+					if podNodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
+						podNodeSelector := podNodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+						podNodeSelector.NodeSelectorTerms = append(podNodeSelector.NodeSelectorTerms, pvNodeSelector.NodeSelectorTerms...)
+					} else {
+						podNodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = &v1.NodeSelector{
+							NodeSelectorTerms: pvNodeSelector.NodeSelectorTerms,
+						}
+					}
+				} else {
+					pod.Spec.Affinity.NodeAffinity = &v1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+							NodeSelectorTerms: pvNodeSelector.NodeSelectorTerms,
+						}}
+				}
+			} else {
+				pod.Spec.Affinity = &v1.Affinity{
+					NodeAffinity: &v1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+							NodeSelectorTerms: pvNodeSelector.NodeSelectorTerms,
+						},
+					},
+				}
+			}
 		} else {
 			// cannot find the right pv
 			glog.Error("Cannot schedule this pod since no matchin PV found", pod.Name)
