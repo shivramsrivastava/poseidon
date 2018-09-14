@@ -946,7 +946,7 @@ func (pw *PodWatcher) getPVNodeAffinity(volumes []v1.Volume, pod *v1.Pod) (*v1.P
 				pvNodeSelector = pv.Spec.NodeAffinity.Required
 			} else {
 				glog.Error("No matching node selecotr for PV found")
-				return nil, false
+				continue
 			}
 
 			if pod.Spec.Affinity != nil {
