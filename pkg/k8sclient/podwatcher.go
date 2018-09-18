@@ -484,7 +484,8 @@ func (pw *PodWatcher) podWorker() {
 						td, ok := PodToTD[pod.Identifier]
 						PodMux.RUnlock()
 						if !ok {
-							glog.Fatalf("Pod %v does not exist", pod.Identifier)
+							glog.Infof("Pod %v does not exist", pod.Identifier)
+							continue
 						}
 						firmament.TaskCompleted(pw.fc, &firmament.TaskUID{TaskUid: td.Uid})
 						PodMux.Lock()
@@ -532,7 +533,8 @@ func (pw *PodWatcher) podWorker() {
 						td, ok := PodToTD[pod.Identifier]
 						PodMux.RUnlock()
 						if !ok {
-							glog.Fatalf("Pod %s does not exist", pod.Identifier)
+							glog.Infof("Pod %s does not exist", pod.Identifier)
+							continue
 						}
 						//TODO(nikita): remove the print
 						fmt.Println("Failed Task Id: ", td.Uid)
