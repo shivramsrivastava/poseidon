@@ -485,6 +485,17 @@ func (pw *PodWatcher) podWorker() {
 							glog.Fatalf("Pod %v does not exist", pod.Identifier)
 						}
 						firmament.TaskCompleted(pw.fc, &firmament.TaskUID{TaskUid: td.Uid})
+						PodMux.Lock()
+						delete(PodToTD, pod.Identifier)
+						delete(TaskIDToPod, td.GetUid())
+						jobID := pw.generateJobID(pod.OwnerRef)
+						jobNumTasksToRemove[jobID]--
+						if jobNumTasksToRemove[jobID] == 0 {
+							// Clean state because the job doesn't have any tasks left.
+							delete(jobNumTasksToRemove, jobID)
+							delete(jobIDToJD, jobID)
+						}
+						PodMux.Unlock()
 					case PodDeleted:
 						glog.V(2).Info("PodDeleted ", pod.Identifier)
 						PodMux.RLock()
@@ -964,7 +975,7 @@ func (pw *PodWatcher) getPVNodeAffinity(volumes []v1.Volume, pod *v1.Pod) (*v1.P
 								//Note: we don't use the node fields terms
 								nodeSelectorTerm.MatchExpressions = append(nodeSelectorTerm.MatchExpressions, pvNodeSelector.MatchExpressions...)
 							}
-							podNodeSelector.NodeSelectorTerms[0]=nodeSelectorTerm
+							podNodeSelector.NodeSelectorTerms[0] = nodeSelectorTerm
 							glog.Info(pod.Spec.Affinity.NodeAffinity)
 						} else {
 							//an impossible case

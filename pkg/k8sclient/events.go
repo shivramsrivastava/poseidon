@@ -149,7 +149,7 @@ func (posiedonEvents *PoseidonEvents) RecalculateMissingPods() {
 	posiedonEvents.Lock()
 	for podIdentifier, val := range posiedonEvents.podInfo {
 		glog.Info("RecalculateMissingPods called ", podIdentifier, val)
-		if val > 2 {
+		if val >= 5 {
 			glog.Info(podIdentifier, " cannot be scheduled anymore it pass 2 scheduling runs")
 			PodToK8sPodLock.Lock()
 			// Note: accessing the below map PodToK8sPod without checking if the value exists
