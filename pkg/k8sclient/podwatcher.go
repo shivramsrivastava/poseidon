@@ -462,6 +462,7 @@ func (pw *PodWatcher) podWorker() {
 						taskCount := jobNumTasksToRemove[jobID]
 						PodMux.Unlock()
 						td := pw.addTaskToJob(pod, jd.Uuid, jd.Name, (taskCount))
+						glog.Info("td for pod",pod.Identifier.Name, pod.Identifier.Namespace," is ",td.Uid,td.Name,td.Namespace)
 						PodMux.Lock()
 						// if taskCount is '1' it means root task, update the RootTask pointer in the JobDescriptor
 						if taskCount == 1 {
