@@ -384,7 +384,7 @@ func (pw *PodWatcher) enqueuePodUpdate(key, oldObj, newObj interface{}) {
 			// we need to change the state here
 			updatedPod.State = PodUpdated
 			pw.podWorkQueue.Add(key, updatedPod)
-			glog.V(2).Infof("enqueuePodUpdate: Updated pod ", updatedPod.Identifier)
+			glog.V(2).Infof("enqueuePodUpdate: Updated pod %v", updatedPod.Identifier)
 		}
 		return
 	}
@@ -463,7 +463,7 @@ func (pw *PodWatcher) podWorker() {
 						taskCount := jobNumTasksToRemove[jobID]
 						PodMux.Unlock()
 						td := pw.addTaskToJob(pod, jd.Uuid, jd.Name, (taskCount))
-						glog.Info("td for pod",pod.Identifier.Name, pod.Identifier.Namespace," is ",td.Uid,td.Name,td.Namespace)
+						glog.Info("td for pod", pod.Identifier.Name, pod.Identifier.Namespace, " is ", td.Uid, td.Name, td.Namespace)
 						PodMux.Lock()
 						// if taskCount is '1' it means root task, update the RootTask pointer in the JobDescriptor
 						if taskCount == 1 {
@@ -485,7 +485,8 @@ func (pw *PodWatcher) podWorker() {
 						td, ok := PodToTD[pod.Identifier]
 						PodMux.RUnlock()
 						if !ok {
-							glog.Fatalf("Pod %v does not exist", pod.Identifier)
+							glog.Infof("Pod %v does not exist", pod.Identifier)
+							continue
 						}
 						firmament.TaskCompleted(pw.fc, &firmament.TaskUID{TaskUid: td.Uid})
 						PodMux.Lock()
@@ -533,7 +534,8 @@ func (pw *PodWatcher) podWorker() {
 						td, ok := PodToTD[pod.Identifier]
 						PodMux.RUnlock()
 						if !ok {
-							glog.Fatalf("Pod %s does not exist", pod.Identifier)
+							glog.Infof("Pod %s does not exist", pod.Identifier)
+							continue
 						}
 						//TODO(nikita): remove the print
 						fmt.Println("Failed Task Id: ", td.Uid)
