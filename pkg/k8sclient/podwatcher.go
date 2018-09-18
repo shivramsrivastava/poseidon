@@ -122,7 +122,7 @@ func NewPodWatcher(kubeVerMajor, kubeVerMinor int, schedulerName string, client 
 				}
 				//podWatcher.enqueuePodUpdate(key, old, new)
 				pod := new.(*v1.Pod)
-				if pod.Namespace != "kube-system" && pod.Spec.NodeName == "" {
+				if pod.Namespace != "kube-system" {
 					podWatcher.enqueuePodUpdate(key, old, new)
 				}
 
@@ -134,7 +134,7 @@ func NewPodWatcher(kubeVerMajor, kubeVerMinor int, schedulerName string, client 
 				}
 				//podWatcher.enqueuePodDeletion(key, obj)
 				pod := obj.(*v1.Pod)
-				if pod.Namespace != "kube-system" && pod.Spec.NodeName == "" {
+				if pod.Namespace != "kube-system" {
 					podWatcher.enqueuePodDeletion(key, obj)
 				}
 
@@ -442,6 +442,7 @@ func (pw *PodWatcher) podWorker() {
 						// check if the pod already exists
 						// this cases happend when Replicaset are used.
 						// When a replicaset is delete it creates more pods with the same name
+						pod.Identifier.NodeName = ""
 						_, ok := PodToTD[pod.Identifier]
 						if ok {
 							// we ignore this since the pod already exists
@@ -480,6 +481,7 @@ func (pw *PodWatcher) podWorker() {
 					case PodSucceeded:
 						glog.V(2).Info("PodSucceeded ", pod.Identifier)
 						PodMux.RLock()
+						pod.Identifier.NodeName = ""
 						td, ok := PodToTD[pod.Identifier]
 						PodMux.RUnlock()
 						if !ok {
@@ -500,6 +502,7 @@ func (pw *PodWatcher) podWorker() {
 					case PodDeleted:
 						glog.V(2).Info("PodDeleted ", pod.Identifier)
 						PodMux.RLock()
+						pod.Identifier.NodeName = ""
 						td, ok := PodToTD[pod.Identifier]
 						PodMux.RUnlock()
 						if !ok {
@@ -511,6 +514,7 @@ func (pw *PodWatcher) podWorker() {
 						//TODO(nikita): remove the print
 						fmt.Println("Deletion Task Id: ", td.Uid)
 						PodMux.Lock()
+						pod.Identifier.NodeName = ""
 						delete(PodToTD, pod.Identifier)
 						delete(TaskIDToPod, td.GetUid())
 						// TODO(ionel): Should we delete the task from JD's spawned field?
@@ -525,6 +529,7 @@ func (pw *PodWatcher) podWorker() {
 					case PodFailed:
 						glog.V(2).Info("PodFailed ", pod.Identifier)
 						PodMux.RLock()
+						pod.Identifier.NodeName = ""
 						td, ok := PodToTD[pod.Identifier]
 						PodMux.RUnlock()
 						if !ok {
@@ -542,6 +547,7 @@ func (pw *PodWatcher) podWorker() {
 					case PodUpdated:
 						glog.V(2).Info("PodUpdated ", pod.Identifier)
 						PodMux.Lock()
+						pod.Identifier.NodeName = ""
 						jobId := pw.generateJobID(pod.OwnerRef)
 						jd, okJob := jobIDToJD[jobId]
 						td, okPod := PodToTD[pod.Identifier]
