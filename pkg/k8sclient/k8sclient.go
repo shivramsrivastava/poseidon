@@ -91,8 +91,9 @@ func New(schedulerName string, kubeConfig string, kubeVersionMajor, kubeVersionM
 	defer conn.Close()
 	glog.Info("k8s newclient called")
 	stopCh := make(chan struct{})
-	go NewPodWatcher(kubeVersionMajor, kubeVersionMinor, schedulerName, ClientSet, fc).Run(stopCh, 10)
-	go NewNodeWatcher(ClientSet, fc).Run(stopCh, 10)
+	go NewPodWatcher(kubeVersionMajor, kubeVersionMinor, schedulerName, clientSet, fc).Run(stopCh, 10)
+	go NewNodeWatcher(clientSet, fc).Run(stopCh, 10)
+	go NewK8sPodWatcher(kubeVersionMajor, kubeVersionMinor, schedulerName, clientSet, fc).controller.Run(stopCh)
 
 	// We block here.
 	<-stopCh

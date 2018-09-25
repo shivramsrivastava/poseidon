@@ -256,3 +256,13 @@ var ProcessedPodEvents map[PodIdentifier]*v1.Pod // map will have all the pods w
 var ProcessedPodEventsLock *sync.Mutex
 var PodToK8sPod map[PodIdentifier]*v1.Pod
 var PodToK8sPodLock *sync.Mutex
+
+// PodWatcher is a Kubernetes pod watcher.
+type K8sPodWatcher struct {
+	//ID string
+	clientset  kubernetes.Interface
+	controller cache.Controller
+	fc         firmament.FirmamentSchedulerClient
+	K8sPods    map[string]*firmament.TaskInfo
+	sync.Mutex
+}
