@@ -245,3 +245,13 @@ type BindInfo struct {
 }
 
 var BindChannel chan BindInfo
+
+// PodWatcher is a Kubernetes pod watcher.
+type K8sPodWatcher struct {
+	//ID string
+	clientset    kubernetes.Interface
+	controller   cache.Controller
+	fc           firmament.FirmamentSchedulerClient
+	K8sPods      map[string]*firmament.TaskInfo
+	sync.Mutex
+}

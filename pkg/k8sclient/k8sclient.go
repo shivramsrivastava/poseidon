@@ -92,6 +92,7 @@ func New(schedulerName string, kubeConfig string, kubeVersionMajor, kubeVersionM
 	stopCh := make(chan struct{})
 	go NewPodWatcher(kubeVersionMajor, kubeVersionMinor, schedulerName, clientSet, fc).Run(stopCh, 10)
 	go NewNodeWatcher(clientSet, fc).Run(stopCh, 10)
+	go NewK8sPodWatcher(kubeVersionMajor, kubeVersionMinor, schedulerName, clientSet, fc)
 
 	// We block here.
 	<-stopCh
