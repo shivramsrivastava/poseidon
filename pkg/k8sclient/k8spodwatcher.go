@@ -17,10 +17,8 @@ limitations under the License.
 package k8sclient
 
 import (
-	"github.com/kubernetes-sigs/poseidon/pkg/firmament"
-	"sync"
-
 	"github.com/golang/glog"
+	"github.com/kubernetes-sigs/poseidon/pkg/firmament"
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,14 +33,10 @@ import (
 // NewPodWatcher initialize a PodWatcher.
 func NewK8sPodWatcher(kubeVerMajor, kubeVerMinor int, schedulerName string, client kubernetes.Interface, fc firmament.FirmamentSchedulerClient) *K8sPodWatcher {
 	glog.V(2).Info("Starting K8sPodWatcher...")
-	PodMux = new(sync.RWMutex)
-	PodToTD = make(map[PodIdentifier]*firmament.TaskDescriptor)
-	TaskIDToPod = make(map[uint64]PodIdentifier)
-	jobIDToJD = make(map[string]*firmament.JobDescriptor)
-	jobNumTasksToRemove = make(map[string]int)
 	podWatcher := &K8sPodWatcher{
 		clientset: client,
 		fc:        fc,
+		K8sPods:   make(map[string]*firmament.TaskInfo),
 	}
 	schedulerSelector := fields.Everything()
 	podSelector := labels.Everything()
@@ -149,10 +143,11 @@ func (pw *K8sPodWatcher) parsePod(pod *v1.Pod) *firmament.TaskInfo {
 		return nil
 	} else {
 		NodeMux.Lock()
+		defer NodeMux.Unlock()
 		if rtnd, ok := NodeToRTND[pod.Spec.NodeName]; ok {
 			resourceID = rtnd.GetResourceDesc().GetUuid()
 		} else {
-			glog.Errorf("Node ", pod.Spec.NodeName, " doesn't exist")
+			glog.Error("Node ", pod.Spec.NodeName, " doesn't exist", pod.Spec.Hostname, NodeToRTND)
 			return nil
 		}
 	}
@@ -205,6 +200,7 @@ func (pw *K8sPodWatcher) enqueuePodAddition(key interface{}, obj interface{}) {
 		if pw.CheckAndUpdateK8sPodMap(addedPod) {
 			//can send the info
 			// this can be for a pod already running/succeded or newly added and in pending state
+			glog.Infof("enqueuePodAddition: Calling AddTaskInfo addedPod")
 			firmament.AddTaskInfo(pw.fc, addedPod)
 			glog.V(2).Info("AddTaskInfo sent for pod", addedPod.GetTaskName())
 		} else {
@@ -220,11 +216,13 @@ func (pw *K8sPodWatcher) enqueuePodDeletion(key interface{}, obj interface{}) {
 			if _, ok := pw.K8sPods[deletePod.GetTaskName()]; ok {
 				//check the opType and send it to firmament
 				if pw.CheckOpType(deletePod, firmament.TaskInfoType_TASKINFO_REMOVE) {
+					glog.Infof("enqueuePodDeletion: Calling AddTaskInfo deletePod")
 					firmament.AddTaskInfo(pw.fc, deletePod)
 					_ = pw.RemoveTaskfromK8sPodMap(deletePod)
 				} else {
 					glog.V(2).Info("OpType for deleting pod is different", deletePod.GetType())
 					deletePod.Type = firmament.TaskInfoType_TASKINFO_REMOVE
+					glog.Infof("enqueuePodDeletion: Calling AddTaskInfo deletePod else case")
 					firmament.AddTaskInfo(pw.fc, deletePod)
 					_ = pw.RemoveTaskfromK8sPodMap(deletePod)
 				}
@@ -247,6 +245,7 @@ func (pw *K8sPodWatcher) enqueuePodUpdate(key, oldObj, newObj interface{}) {
 				if pw.CheckAndUpdateK8sPodMap(addedPod) {
 					//can send the info
 					// this can be for a pod already running/succeded or newly added and in pending state
+					glog.Infof("enqueuePodUpdate: Calling AddTaskInfo addedPod")
 					firmament.AddTaskInfo(pw.fc, addedPod)
 					glog.V(2).Info("AddTaskInfo sent for pod", addedPod.GetTaskName())
 				} else {
@@ -259,11 +258,13 @@ func (pw *K8sPodWatcher) enqueuePodUpdate(key, oldObj, newObj interface{}) {
 				if _, ok := pw.K8sPods[deletePod.GetTaskName()]; ok {
 					//check the opType and send it to firmament
 					if pw.CheckOpType(deletePod, firmament.TaskInfoType_TASKINFO_REMOVE) {
+						glog.Infof("enqueuePodUpdate: Calling AddTaskInfo deletePod")
 						firmament.AddTaskInfo(pw.fc, deletePod)
 						_ = pw.RemoveTaskfromK8sPodMap(deletePod)
 					} else {
 						glog.V(2).Info("OpType for deleting pod is different", deletePod.GetType())
 						deletePod.Type = firmament.TaskInfoType_TASKINFO_REMOVE
+						glog.Infof("enqueuePodUpdate: Calling AddTaskInfo deletePod else case")
 						firmament.AddTaskInfo(pw.fc, deletePod)
 						_ = pw.RemoveTaskfromK8sPodMap(deletePod)
 					}
