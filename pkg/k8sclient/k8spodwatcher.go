@@ -17,6 +17,7 @@ limitations under the License.
 package k8sclient
 
 import (
+	"time"
 	"github.com/golang/glog"
 	"github.com/kubernetes-sigs/poseidon/pkg/firmament"
 
@@ -39,17 +40,14 @@ func NewK8sPodWatcher(kubeVerMajor, kubeVerMinor int, schedulerName string, clie
 		K8sPods:   make(map[string]*firmament.TaskInfo),
 	}
 	schedulerSelector := fields.Everything()
+	schedulerSelector = fields.ParseSelectorOrDie("spec.schedulerName!=" + schedulerName)
 	podSelector := labels.Everything()
-	if kubeVerMajor >= 1 && kubeVerMinor >= 6 {
-		// schedulerName is only available in Kubernetes >= 1.6.
-		schedulerSelector = fields.ParseSelectorOrDie("spec.schedulerName!=" + schedulerName)
-	} else {
 		var err error
 		podSelector, err = labels.Parse("scheduler notin (" + schedulerName + ")")
 		if err != nil {
 			glog.Fatal("Failed to parse scheduler label selector")
 		}
-	}
+	glog.Info("sch name ",schedulerName, "podSelector",podSelector,"schedulerSelector",schedulerSelector)
 	_, controller := cache.NewInformer(
 		&cache.ListWatch{
 			ListFunc: func(alo metav1.ListOptions) (runtime.Object, error) {
@@ -90,9 +88,25 @@ func NewK8sPodWatcher(kubeVerMajor, kubeVerMinor int, schedulerName string, clie
 		},
 	)
 	podWatcher.controller = controller
-	stop := make(chan struct{})
-	go podWatcher.controller.Run(stop)
+	//stop := make(chan struct{})
+	NodeInfoUpdated()
+	//go podWatcher.controller.Run(stop)
 	return podWatcher
+}
+
+func NodeInfoUpdated() bool{
+	for{
+		glog.Info("in NodeInfoUpdated HEAD")
+		time.Sleep(5*time.Second)
+		NodeMux.Lock()
+		if len(NodeToRTND) >0 {
+			glog.Info("in NodeInfoUpdated", len(NodeToRTND))
+			NodeMux.Unlock()
+			return true
+		}
+                NodeMux.Unlock()
+	}
+
 }
 
 func (pw *K8sPodWatcher) getCPUMemRequest(pod *v1.Pod) (int64, int64, int64) {
@@ -163,26 +177,29 @@ func (pw *K8sPodWatcher) parsePod(pod *v1.Pod) *firmament.TaskInfo {
 
 // CheckAndUpdateK8sPodMap will return true if a new object added else will return false
 func (pw *K8sPodWatcher) CheckAndUpdateK8sPodMap(taskinfo *firmament.TaskInfo) bool {
-	ok := false
+	updateFlag := false
 	pw.Lock()
 	if _, ok := pw.K8sPods[taskinfo.GetTaskName()]; !ok {
+		glog.Info("in CheckAndUpdateK8sPodMap not found ", pw.K8sPods[taskinfo.GetTaskName()], "\n", taskinfo.GetTaskName(), "\n", pw.K8sPods, "\n")
 		pw.K8sPods[taskinfo.GetTaskName()] = taskinfo
-		ok = true
+		glog.Info("in CheckAndUpdateK8sPodMap after adding ", pw.K8sPods[taskinfo.GetTaskName()], "\n", taskinfo.GetTaskName(), "\n", pw.K8sPods, "\n")
+		updateFlag = true
 	}
 	pw.Unlock()
-	return ok
+	glog.Info("in CheckAndUpdateK8sPodMap not found ", pw.K8sPods[taskinfo.GetTaskName()], taskinfo.GetTaskName(), pw.K8sPods, updateFlag)
+	return updateFlag
 }
 
 // RemoveTaskfromK8sPodMap return true if remove was successful
 func (pw *K8sPodWatcher) RemoveTaskfromK8sPodMap(taskinfo *firmament.TaskInfo) bool {
-	ok := false
+	removeFlag := false
 	pw.Lock()
 	if _, ok := pw.K8sPods[taskinfo.GetTaskName()]; ok {
 		delete(pw.K8sPods, taskinfo.GetTaskName())
-		ok = true
+		removeFlag = true
 	}
 	pw.Unlock()
-	return ok
+	return removeFlag
 
 }
 
@@ -204,9 +221,10 @@ func (pw *K8sPodWatcher) enqueuePodAddition(key interface{}, obj interface{}) {
 			firmament.AddTaskInfo(pw.fc, addedPod)
 			glog.V(2).Info("AddTaskInfo sent for pod", addedPod.GetTaskName())
 		} else {
-			glog.V(2).Info("igoring the AddTaskInfo for already existing task", addedPod.GetTaskName())
+			glog.V(2).Info("igoring the AddTaskInfo for already existing task enqueuePodAddition", addedPod.GetTaskName())
 		}
 	}
+	glog.Info(pw.K8sPods, "in enqueuePodAddition")
 }
 
 func (pw *K8sPodWatcher) enqueuePodDeletion(key interface{}, obj interface{}) {
@@ -233,6 +251,7 @@ func (pw *K8sPodWatcher) enqueuePodDeletion(key interface{}, obj interface{}) {
 			glog.V(2).Info("Pending pod getting deleted no AddTaskInfo needed", pod.Name+"/"+pod.Namespace)
 		}
 	}
+	glog.Info(pw.K8sPods, "in enqueuePodDeletion")
 }
 
 func (pw *K8sPodWatcher) enqueuePodUpdate(key, oldObj, newObj interface{}) {
@@ -249,7 +268,7 @@ func (pw *K8sPodWatcher) enqueuePodUpdate(key, oldObj, newObj interface{}) {
 					firmament.AddTaskInfo(pw.fc, addedPod)
 					glog.V(2).Info("AddTaskInfo sent for pod", addedPod.GetTaskName())
 				} else {
-					glog.V(2).Info("igoring the AddTaskInfo for already existing task", addedPod.GetTaskName())
+					glog.V(2).Info("igoring the AddTaskInfo for already existing task enqueuePodUpdate", addedPod.GetTaskName())
 				}
 			}
 		} else {
@@ -277,4 +296,5 @@ func (pw *K8sPodWatcher) enqueuePodUpdate(key, oldObj, newObj interface{}) {
 
 		}
 	}
+	glog.Info(pw.K8sPods, "in enqueuePodUpdate")
 }
