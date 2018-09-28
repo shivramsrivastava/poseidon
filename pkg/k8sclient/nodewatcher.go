@@ -113,6 +113,7 @@ func (nw *NodeWatcher) parseNode(node *v1.Node, phase NodePhase) *Node {
 	memCap, _ := memCapQuantity.AsInt64()
 	memAllocQuantity := node.Status.Allocatable[v1.ResourceMemory]
 	memAlloc, _ := memAllocQuantity.AsInt64()
+	podAllocQuantity := node.Status.Allocatable[v1.ResourcePods]
 
 	return &Node{
 		Hostname:         node.Name,
@@ -123,6 +124,7 @@ func (nw *NodeWatcher) parseNode(node *v1.Node, phase NodePhase) *Node {
 		CPUAllocatable:   cpuAllocQuantity.MilliValue(),
 		MemCapacityKb:    memCap / bytesToKb,
 		MemAllocatableKb: memAlloc / bytesToKb,
+		PodAllocatable:   podAllocQuantity.Value(),
 		Labels:           node.Labels,
 		Annotations:      node.Annotations,
 		Taints:           nw.getTaints(node),
@@ -321,6 +323,7 @@ func (nw *NodeWatcher) createResourceTopologyForNode(node *Node) *firmament.Reso
 				RamCap:   uint64(node.MemCapacityKb),
 				CpuCores: float32(node.CPUCapacity),
 			},
+			MaxPods: uint64(node.PodAllocatable),
 		},
 	}
 	ResIDToNode[resUUID] = node.Hostname
