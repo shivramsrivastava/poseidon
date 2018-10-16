@@ -80,16 +80,6 @@ func NewPodWatcher(kubeVerMajor, kubeVerMinor int, schedulerName string, client 
 	}
 	schedulerSelector := fields.Everything()
 	podSelector := labels.Everything()
-	if kubeVerMajor >= 1 && kubeVerMinor >= 6 {
-		// schedulerName is only available in Kubernetes >= 1.6.
-		schedulerSelector = fields.ParseSelectorOrDie("spec.schedulerName==" + schedulerName)
-	} else {
-		var err error
-		podSelector, err = labels.Parse("scheduler in (" + schedulerName + ")")
-		if err != nil {
-			glog.Fatal("Failed to parse scheduler label selector")
-		}
-	}
 	_, controller := cache.NewInformer(
 		&cache.ListWatch{
 			ListFunc: func(alo metav1.ListOptions) (runtime.Object, error) {
@@ -111,21 +101,43 @@ func NewPodWatcher(kubeVerMajor, kubeVerMinor int, schedulerName string, client 
 				if err != nil {
 					glog.Errorf("AddFunc: error getting key %v", err)
 				}
-				podWatcher.enqueuePodAddition(key, obj)
+				//podWatcher.enqueuePodAddition(key, obj)
+				pod := obj.(*v1.Pod)
+				fmt.Println("\n ***NodeName received is: ", pod.Spec.NodeName)
+				if pod.Spec.NodeName == "" {
+					if pod.Namespace != "kube-system" {
+						podWatcher.enqueuePodAddition(key, obj)
+					} else {
+						if pod.Status.Phase == v1.PodPending {
+							podWatcher.enqueuePodAddition(key, obj)
+						}
+					}
+				}
+
 			},
 			UpdateFunc: func(old, new interface{}) {
 				key, err := cache.MetaNamespaceKeyFunc(new)
 				if err != nil {
 					glog.Errorf("UpdateFunc: error getting key %v", err)
 				}
-				podWatcher.enqueuePodUpdate(key, old, new)
+				//podWatcher.enqueuePodUpdate(key, old, new)
+				pod := new.(*v1.Pod)
+				if pod.Namespace != "kube-system" {
+					podWatcher.enqueuePodUpdate(key, old, new)
+				}
+
 			},
 			DeleteFunc: func(obj interface{}) {
 				key, err := cache.MetaNamespaceKeyFunc(obj)
 				if err != nil {
 					glog.Errorf("DeleteFunc: error getting key %v", err)
 				}
-				podWatcher.enqueuePodDeletion(key, obj)
+				//podWatcher.enqueuePodDeletion(key, obj)
+				pod := obj.(*v1.Pod)
+				if pod.Namespace != "kube-system" {
+					podWatcher.enqueuePodDeletion(key, obj)
+				}
+
 			},
 		},
 	)
@@ -244,6 +256,10 @@ func (pw *PodWatcher) getTolerations(pod *v1.Pod) []Toleration {
 
 func (pw *PodWatcher) parsePod(pod *v1.Pod) *Pod {
 	cpuReq, memReq, ephemeralReq := pw.getCPUMemEphemeralRequest(pod)
+	if pod.Spec.SchedulerName == "" {
+		glog.Info("parsePod: We dont process this pod ", pod.Name, " this is to be scheduled by ", pod.Spec.SchedulerName)
+		return nil
+	}
 	podPhase := PodUnknown
 	switch pod.Status.Phase {
 	case v1.PodPending:
@@ -323,6 +339,10 @@ func (pw *PodWatcher) enqueuePodAddition(key interface{}, obj interface{}) {
 
 func (pw *PodWatcher) enqueuePodDeletion(key interface{}, obj interface{}) {
 	pod := obj.(*v1.Pod)
+	if pod.Spec.SchedulerName == "" {
+		glog.Info("enqueuePodDeletion: We dont process this pod ", pod.Name, " this is to be scheduled by ", pod.Spec.SchedulerName)
+		return
+	}
 	if pod.DeletionTimestamp != nil {
 		// Only delete pods if they have a DeletionTimestamp.
 		deletedPod := &Pod{
