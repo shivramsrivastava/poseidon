@@ -36,13 +36,23 @@ const (
 	FirmamentHealthCheckTimeout  = 10 * time.Minute
 )
 
+var TotalScheduleTime time.Duration
+
 func schedule(fc firmament.FirmamentSchedulerClient) {
 
 	stopCh := make(chan struct{})
 	// start the bond od wokers
 	go k8sclient.BindPodWorkers(stopCh, config.GetBurst())
 	for {
+                sinceTime := time.Now()
 		deltas := firmament.Schedule(fc)
+                
+                if len(deltas.Deltas) > 0 {
+			currentScheduleDuration := time.Since(sinceTime)
+			TotalScheduleTime = TotalScheduleTime + currentScheduleDuration
+			glog.Info("Current schedule time", currentScheduleDuration)
+			glog.Info("Cumulative schedule time", TotalScheduleTime)
+		}
 
 		glog.Infof("Scheduler returned %d deltas", len(deltas.GetDeltas()))
 		if (len(deltas.GetUnscheduledTasks()) > 0) || (len(deltas.GetDeltas()) > 0) {
