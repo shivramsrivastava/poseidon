@@ -48,7 +48,8 @@ type NodeSelectors map[string]string
 // Redefine below Annotation key as that is deprecated from original Kubernetes.
 const (
 	// CreatedByAnnotation represents the original Kubernetes `kubernetes.io/created-by` annotation.
-	CreatedByAnnotation = "kubernetes.io/created-by"
+	CreatedByAnnotation      = "kubernetes.io/created-by"
+	GangSchedulingAnnotation = "firmament—gang-scheduling"
 )
 
 // SortNodeSelectorsKey sort node selectors keys and return an slice of sorted keys.
@@ -448,6 +449,8 @@ func (pw *PodWatcher) podWorker() {
 						jd, ok := jobIDToJD[jobID]
 						if !ok {
 							jd = pw.createNewJob(pod.OwnerRef)
+							// get requiremen for gang scheduling if enabled
+							jd = pw.updateGangSchedulingrequireent(pod, jd)
 							jobIDToJD[jobID] = jd
 							jobNumTasksToRemove[jobID] = 0
 						}
@@ -985,4 +988,58 @@ func GetPodConditionFromList(conditions []v1.PodCondition, conditionType v1.PodC
 		}
 	}
 	return -1, nil
+}
+
+// GetGangSchedulingReference to get the parent object reference
+func (pw *PodWatcher) GetGangSchedulingReferenceCount(pod *Pod) int32 {
+	//
+
+	var minGangPods, podCountInjob int32
+
+	if len(pod.Annotations) >= 0 {
+		if gangSchedulingAnnotation, ok := pod.Annotations[GangSchedulingAnnotation]; ok {
+			// search for the controller ref job-name
+			if jobControllerName, ok := pod.Labels["job-name"]; ok {
+
+				job, err := pw.clientset.BatchV1().Jobs(pod.Identifier.Namespace).Get(jobControllerName, metav1.GetOptions{})
+				if err != nil {
+					glog.Errorf("unable to fetch the job info of the pod %v", err)
+					return 0
+				}
+
+				// gangSchedulingAnnotation is the percent value of the min no of pods needed in the job
+				minGangRequirement, err := strconv.ParseInt(gangSchedulingAnnotation, 10, 32)
+				if err != nil || minGangRequirement > 100 {
+					glog.Errorf("unable to convert the gang scheduling requirement %v for %v and the percentage requirement should not exceed 100", err, gangSchedulingAnnotation)
+					return 0
+				}
+
+				// Note we considet Parallelism filed of the job
+				podCountInjob = *job.Spec.Parallelism
+				if podCountInjob == 0 && minGangRequirement < 100 {
+					glog.Errorf("job with a single pod cannot have a fraction gang scheduling requirement")
+					return 0
+				} else {
+					podCountInjob = 1
+				}
+
+				minGangPods = podCountInjob * (int32((minGangRequirement) / 100))
+			}
+
+		}
+	}
+
+	return minGangPods
+}
+
+func (pw *PodWatcher) updateGangSchedulingrequireent(pod *Pod, job *firmament.JobDescriptor) *firmament.JobDescriptor {
+
+	minPodRequired := pw.GetGangSchedulingReferenceCount(pod)
+	if minPodRequired == 0 {
+		return job
+	} else {
+		job.MinNumberOfTasks = uint64(minPodRequired)
+		job.IsGangSchedulingJob = true
+	}
+	return job
 }
