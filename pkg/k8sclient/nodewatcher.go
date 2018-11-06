@@ -117,7 +117,7 @@ func (nw *NodeWatcher) parseNode(node *v1.Node, phase NodePhase) *Node {
 	ephemeralCap, _ := ephemeralCapQty.AsInt64()
 	ephemeralAllocQty := node.Status.Allocatable[v1.ResourceEphemeralStorage]
 	ephemeralAlloc, _ := ephemeralAllocQty.AsInt64()
-
+	podAllocQuantity := node.Status.Allocatable[v1.ResourcePods]
 	return &Node{
 		Hostname:         node.Name,
 		Phase:            phase,
@@ -129,6 +129,7 @@ func (nw *NodeWatcher) parseNode(node *v1.Node, phase NodePhase) *Node {
 		MemAllocatableKb: memAlloc / bytesToKb,
 		EphemeralCapKb:   ephemeralCap / bytesToKb,
 		EphemeralAllocKb: ephemeralAlloc / bytesToKb,
+		PodAllocatable:   podAllocQuantity.Value(),
 		Labels:           node.Labels,
 		Annotations:      node.Annotations,
 		Taints:           nw.getTaints(node),
@@ -324,6 +325,7 @@ func (nw *NodeWatcher) createResourceTopologyForNode(node *Node) *firmament.Reso
 				CpuCores:     float32(node.CPUCapacity),
 				EphemeralCap: uint64(node.EphemeralCapKb),
 			},
+			MaxPods: uint64(node.PodAllocatable),
 		},
 	}
 	ResIDToNode[resUUID] = node.Hostname

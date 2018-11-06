@@ -90,6 +90,7 @@ type Node struct {
 	MemAllocatableKb int64
 	EphemeralCapKb   int64
 	EphemeralAllocKb int64
+	PodAllocatable   int64
 	Labels           map[string]string
 	Annotations      map[string]string
 	Taints           []Taint
