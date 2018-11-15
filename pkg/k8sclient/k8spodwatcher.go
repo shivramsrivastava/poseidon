@@ -166,8 +166,8 @@ func (pw *K8sPodWatcher) parsePod(pod *v1.Pod) *firmament.TaskInfo {
 		TaskName:                    pod.Name + "/" + pod.Namespace,
 		ResourceId:                  resourceID,
 		CpuUtilization:              cpuReq,
-		MemUtilization:              memReq,
-		EphemeralStorageUtilization: ephemeralReq,
+		MemUtilization:              memReq / bytesToKb,
+		EphemeralStorageUtilization: ephemeralReq / bytesToKb,
 		Type: opType,
 	}
 }
