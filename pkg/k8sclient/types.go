@@ -222,6 +222,7 @@ type Pod struct {
 	Affinity        *Affinity
 	CreateTimeStamp metav1.Time
 	Tolerations     []Toleration
+	OwnerKind       string
 }
 
 // NodeWatcher is a Kubernetes node watcher.
