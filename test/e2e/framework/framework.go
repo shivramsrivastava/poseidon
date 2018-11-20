@@ -164,7 +164,7 @@ func (f *Framework) AfterEach() {
 	f.FetchLogsFromFirmament(f.TestingNS)
 	f.FetchLogsFromPoseidon(f.TestingNS)
 	Logf("Delete namespace called")
-	err = f.deleteNamespace(f.TestingNS)
+	err = f.DeleteNamespace(f.TestingNS)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = f.DeleteDeploymentIfExist(f.TestingNS, poseidonDeploymentName)
@@ -332,7 +332,7 @@ func (f *Framework) createFirmamentDeployment() (*v1beta1.Deployment, error) {
 					Containers: []v1.Container{
 						{
 							Name:    "firmament-scheduler",
-							Image:   "huaweifirmament/firmament:gang_scheduling",
+							Image:   "huaweifirmament/firmament:max_pods",
 							Command: []string{"/firmament/build/src/firmament_scheduler", "--flagfile=/firmament/config/firmament_scheduler_cpu_mem.cfg"},
 							Ports:   []v1.ContainerPort{{ContainerPort: 9090}},
 						},

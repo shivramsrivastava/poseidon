@@ -109,4 +109,6 @@ message TaskDescriptor {
   string namespace = 35;
   //Toleration
   repeated Toleration toleration = 36;
+  // Owner reference kind
+  string owner_ref_kind = 37;
 }
