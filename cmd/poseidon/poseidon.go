@@ -17,15 +17,15 @@ limitations under the License.
 package main
 
 import (
+	"encoding/json"
+	"k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"time"
 
 	"github.com/kubernetes-sigs/poseidon/pkg/config"
 	"github.com/kubernetes-sigs/poseidon/pkg/firmament"
-	k8sclient "github.com/kubernetes-sigs/poseidon/pkg/k8sclient"
+	"github.com/kubernetes-sigs/poseidon/pkg/k8sclient"
 	"github.com/kubernetes-sigs/poseidon/pkg/metrics"
-	"github.com/kubernetes-sigs/poseidon/pkg/poseidonhttp"
-	"github.com/kubernetes-sigs/poseidon/pkg/stats"
-
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/golang/glog"
@@ -115,7 +115,7 @@ func WaitForFirmamentService(fc firmament.FirmamentSchedulerClient) {
 func main() {
 
 	glog.Infof("Starting Poseidon with firmament address %s.", config.GetFirmamentAddress())
-	fc, conn, err := firmament.New(config.GetFirmamentAddress())
+	/*fc, conn, err := firmament.New(config.GetFirmamentAddress())
 	if err != nil {
 		panic(err)
 	}
@@ -127,4 +127,55 @@ func main() {
 	go poseidonhttp.Serve(fc)
 	kubeMajorVer, kubeMinorVer := config.GetKubeVersion()
 	k8sclient.New(config.GetSchedulerName(), config.GetKubeConfig(), kubeMajorVer, kubeMinorVer, config.GetFirmamentAddress())
+	*/
+
+	/*
+	   annotations1 := map[string]string{
+	   		v1.PreferAvoidPodsAnnotationKey: `
+	   							{
+	   							    "preferAvoidPods": [
+	   							        {
+	   							            "podSignature": {
+	   							                "podController": {
+	   							                    "apiVersion": "v1",
+	   							                    "kind": "ReplicationController",
+	   							                    "name": "foo",
+	   							                    "uid": "abcdef123456",
+	   							                    "controller": true
+	   							                }
+	   							            },
+	   							            "reason": "some reason",
+	   							            "message": "some message"
+	   							        }
+	   							    ]
+	   							}`,
+	   	}
+	*/
+
+	var avoidPods v1.AvoidPods
+
+	avoidPods = v1.AvoidPods{
+		PreferAvoidPods: []v1.PreferAvoidPodsEntry{
+			{
+				PodSignature: v1.PodSignature{
+					PodController: &metav1.OwnerReference{
+						APIVersion: "v1",
+						Kind:       "ReplicationController",
+						Name:       "rc.Name",
+						UID:        "rc.UID",
+						Controller: func() *bool { b := true; return &b }(),
+					},
+				},
+				Reason:  "some reson",
+				Message: "some message",
+			},
+		},
+	}
+
+	val, err := json.Marshal(avoidPods)
+	if err != nil {
+		glog.Error("marshal failes", err)
+	}
+
+	glog.Info(string(val))
 }
