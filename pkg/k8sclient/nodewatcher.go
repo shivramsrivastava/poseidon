@@ -115,9 +115,9 @@ func (nw *NodeWatcher) parseNode(node *v1.Node, phase NodePhase) *Node {
 	memAllocQuantity := node.Status.Allocatable[v1.ResourceMemory]
 	memAlloc, _ := memAllocQuantity.AsInt64()
 	ephemeralCapQty := node.Status.Capacity[v1.ResourceEphemeralStorage]
-	ephemeralCap, _ := ephemeralCapQty.AsInt64()
+	ephemeralCap := ephemeralCapQty.MilliValue()
 	ephemeralAllocQty := node.Status.Allocatable[v1.ResourceEphemeralStorage]
-	ephemeralAlloc, _ := ephemeralAllocQty.AsInt64()
+	ephemeralAlloc := ephemeralAllocQty.MilliValue()
 	podAllocQuantity := node.Status.Allocatable[v1.ResourcePods]
 	return &Node{
 		Hostname:         node.Name,
@@ -128,8 +128,8 @@ func (nw *NodeWatcher) parseNode(node *v1.Node, phase NodePhase) *Node {
 		CPUAllocatable:   cpuAllocQuantity.MilliValue(),
 		MemCapacityKb:    memCap / bytesToKb,
 		MemAllocatableKb: memAlloc / bytesToKb,
-		EphemeralCapKb:   ephemeralCap / bytesToKb,
-		EphemeralAllocKb: ephemeralAlloc / bytesToKb,
+		EphemeralCapKb:   ephemeralCap / 1000,
+		EphemeralAllocKb: ephemeralAlloc / 1000,
 		PodAllocatable:   podAllocQuantity.Value(),
 		Labels:           node.Labels,
 		Annotations:      node.Annotations,

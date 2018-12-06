@@ -118,7 +118,7 @@ func (pw *K8sPodWatcher) getCPUMemRequest(pod *v1.Pod) (int64, int64, int64) {
 		memReqCont, _ := memReqQuantity.AsInt64()
 		memReq += memReqCont
 		ephemeralReqQuantity := request[v1.ResourceEphemeralStorage]
-		ephemeralReqCont, _ := ephemeralReqQuantity.AsInt64()
+		ephemeralReqCont := ephemeralReqQuantity.MilliValue()
 		ephemeralReq += ephemeralReqCont
 
 	}
@@ -167,8 +167,8 @@ func (pw *K8sPodWatcher) parsePod(pod *v1.Pod) *firmament.TaskInfo {
 		ResourceId:                  resourceID,
 		CpuUtilization:              cpuReq,
 		MemUtilization:              memReq / bytesToKb,
-		EphemeralStorageUtilization: ephemeralReq / bytesToKb,
-		Type: opType,
+		EphemeralStorageUtilization: ephemeralReq / 1000,
+		Type:                        opType,
 	}
 }
 

@@ -151,7 +151,7 @@ func (pw *PodWatcher) getCPUMemEphemeralRequest(pod *v1.Pod) (int64, int64, int6
 		memReqCont, _ := memReqQuantity.AsInt64()
 		memReq += memReqCont
 		ephemeralReqQuantity := request[v1.ResourceEphemeralStorage]
-		ephemeralReqCont, _ := ephemeralReqQuantity.AsInt64()
+		ephemeralReqCont := ephemeralReqQuantity.MilliValue()
 		ephemeralReq += ephemeralReqCont
 	}
 	return cpuReq, memReq, ephemeralReq
@@ -269,7 +269,7 @@ func (pw *PodWatcher) parsePod(pod *v1.Pod) *Pod {
 		State:          podPhase,
 		CPURequest:     cpuReq,
 		MemRequestKb:   memReq / bytesToKb,
-		EphemeralReqKb: ephemeralReq / bytesToKb,
+		EphemeralReqKb: ephemeralReq / 1000,
 		Labels:         pod.Labels,
 		Annotations:    pod.Annotations,
 		NodeSelector:   pod.Spec.NodeSelector,
