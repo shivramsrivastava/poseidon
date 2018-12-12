@@ -256,7 +256,7 @@ func (nw *NodeWatcher) nodeWorker() {
 						continue
 					}
 					NodeToRTND[node.Hostname] = rtnd
-					glog.Info(NodeToRTND, " in Nodedded")
+					//glog.Info(NodeToRTND, " in Nodedded")
 					ResIDToNode[rtnd.GetResourceDesc().GetUuid()] = node.Hostname
 					NodeMux.Unlock()
 					firmament.NodeAdded(nw.fc, rtnd)

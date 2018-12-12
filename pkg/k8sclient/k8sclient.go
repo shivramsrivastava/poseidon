@@ -20,6 +20,7 @@ import (
 	"github.com/kubernetes-sigs/poseidon/pkg/firmament"
 	"k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -27,16 +28,19 @@ import (
 	"github.com/golang/glog"
 	config2 "github.com/kubernetes-sigs/poseidon/pkg/config"
 	"k8s.io/apimachinery/pkg/util/wait"
+	restclient "k8s.io/client-go/rest"
 	"sync"
 	"time"
 )
 
-var ClientSet kubernetes.Interface
+var ClientSet, BindClientSet kubernetes.Interface
 
 // BindPodToNode call Kubernetes API to place a pod on a node.
 func BindPodToNode() {
 	for {
 		bindInfo := <-BindChannel
+		//go func() {
+		//glog.Info(bindInfo, " bing info ", ClientSet)
 		err := ClientSet.CoreV1().Pods(bindInfo.Namespace).Bind(&v1.Binding{
 			TypeMeta: meta_v1.TypeMeta{},
 			ObjectMeta: meta_v1.ObjectMeta{
@@ -48,7 +52,11 @@ func BindPodToNode() {
 			}})
 		if err != nil {
 			glog.Errorf("Could not bind pod:%s to nodeName:%s, error: %v", bindInfo.Name, bindInfo.Nodename, err)
+			time.Sleep(1 * time.Second)
+			BindChannel <- bindInfo
+
 		}
+		//}()
 	}
 }
 
@@ -71,7 +79,7 @@ func GetClientConfig(kubeconfig string) (*rest.Config, error) {
 // New initializes a firmament and Kubernetes client and starts watching Pod and Node.
 func New(schedulerName string, kubeConfig string, kubeVersionMajor, kubeVersionMinor int, firmamentAddress string) {
 
-	config, err := GetClientConfig(kubeConfig)
+	/*config, err := GetClientConfig(kubeConfig)
 	if err != nil {
 		glog.Fatalf("Failed to load client config: %v", err)
 	}
@@ -79,11 +87,29 @@ func New(schedulerName string, kubeConfig string, kubeVersionMajor, kubeVersionM
 
 	config.QPS = config2.GetQPS()
 	config.Burst = config2.GetBurst()
-
-	ClientSet, err = kubernetes.NewForConfig(config)
+	*/
+	ClientSetl, err := kubernetes.NewForConfig(&restclient.Config{
+		Host:          config2.GetkubeServerUrl(),
+		ContentConfig: restclient.ContentConfig{GroupVersion: &schema.GroupVersion{Group: "", Version: "v1"}},
+		QPS:           5000.0,
+		Burst:         5000,
+	})
+	ClientSet = ClientSetl
 	if err != nil {
 		glog.Fatalf("Failed to create connection: %v", err)
 	}
+
+	BindClientSet, err = kubernetes.NewForConfig(&restclient.Config{
+		Host:          config2.GetkubeServerUrl(),
+		ContentConfig: restclient.ContentConfig{GroupVersion: &schema.GroupVersion{Group: "", Version: "v1"}},
+		QPS:           5000.0,
+		Burst:         5000,
+	})
+
+	if err != nil {
+		glog.Fatalf("Failed to create connection: %v", err)
+	}
+
 	fc, conn, err := firmament.New(firmamentAddress)
 	if err != nil {
 		glog.Fatalf("Failed to connect to Firmament: %v", err)
@@ -93,7 +119,6 @@ func New(schedulerName string, kubeConfig string, kubeVersionMajor, kubeVersionM
 	stopCh := make(chan struct{})
 	go NewPodWatcher(kubeVersionMajor, kubeVersionMinor, schedulerName, ClientSet, fc).Run(stopCh, 10)
 	go NewNodeWatcher(ClientSet, fc).Run(stopCh, 10)
-	go NewK8sPodWatcher(kubeVersionMajor, kubeVersionMinor, schedulerName, ClientSet, fc).controller.Run(stopCh)
 
 	// We block here.
 	<-stopCh
@@ -102,7 +127,7 @@ func New(schedulerName string, kubeConfig string, kubeVersionMajor, kubeVersionM
 func init() {
 
 	glog.Info("k8sclient init called")
-	BindChannel = make(chan BindInfo, 1000)
+	BindChannel = make(chan BindInfo, 35000)
 	PodToK8sPodLock = new(sync.Mutex)
 	ProcessedPodEventsLock = new(sync.Mutex)
 	PodToK8sPod = make(map[PodIdentifier]*v1.Pod)
@@ -112,7 +137,7 @@ func init() {
 // Run starts a pod watcher.
 func BindPodWorkers(stopCh <-chan struct{}, nWorkers int) {
 
-	for i := 0; i < nWorkers; i++ {
+	for i := 0; i < 500; i++ {
 		go wait.Until(BindPodToNode, time.Second, stopCh)
 	}
 
