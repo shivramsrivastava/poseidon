@@ -17,6 +17,7 @@ limitations under the License.
 package k8sclient
 
 import (
+	"bufio"
 	"github.com/kubernetes-sigs/poseidon/pkg/firmament"
 	"k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,9 +25,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"net"
 
 	"github.com/golang/glog"
-	config2 "github.com/kubernetes-sigs/poseidon/pkg/config"
 	"k8s.io/apimachinery/pkg/util/wait"
 	restclient "k8s.io/client-go/rest"
 	"sync"
@@ -88,19 +89,37 @@ func New(schedulerName string, kubeConfig string, kubeVersionMajor, kubeVersionM
 	config.QPS = config2.GetQPS()
 	config.Burst = config2.GetBurst()
 	*/
+	glog.Info("We are waiting for the schduler perf test to send the apiserver address")
+
+	apiserverAddress:=StartAndWaitForPerfPort()
+
+	glog.Info("The scheduler perf server address",apiserverAddress)
 	ClientSetl, err := kubernetes.NewForConfig(&restclient.Config{
-		Host:          config2.GetkubeServerUrl(),
+		Host:          apiserverAddress,
 		ContentConfig: restclient.ContentConfig{GroupVersion: &schema.GroupVersion{Group: "", Version: "v1"}},
 		QPS:           5000.0,
 		Burst:         5000,
 	})
-	ClientSet = ClientSetl
+
 	if err != nil {
 		glog.Fatalf("Failed to create connection: %v", err)
 	}
 
+	ClientSet, err := kubernetes.NewForConfig(&restclient.Config{
+		Host:          apiserverAddress,
+		ContentConfig: restclient.ContentConfig{GroupVersion: &schema.GroupVersion{Group: "", Version: "v1"}},
+		QPS:           5000.0,
+		Burst:         5000,
+	})
+
+	if err != nil {
+		glog.Fatalf("Failed to create connection: %v", err)
+	}
+
+
+
 	BindClientSet, err = kubernetes.NewForConfig(&restclient.Config{
-		Host:          config2.GetkubeServerUrl(),
+		Host:          apiserverAddress,
 		ContentConfig: restclient.ContentConfig{GroupVersion: &schema.GroupVersion{Group: "", Version: "v1"}},
 		QPS:           5000.0,
 		Burst:         5000,
@@ -118,7 +137,7 @@ func New(schedulerName string, kubeConfig string, kubeVersionMajor, kubeVersionM
 	glog.Info("k8s newclient called")
 	stopCh := make(chan struct{})
 	go NewPodWatcher(kubeVersionMajor, kubeVersionMinor, schedulerName, ClientSet, fc).Run(stopCh, 10)
-	go NewNodeWatcher(ClientSet, fc).Run(stopCh, 10)
+	go NewNodeWatcher(ClientSetl, fc).Run(stopCh, 10)
 
 	// We block here.
 	<-stopCh
@@ -143,4 +162,28 @@ func BindPodWorkers(stopCh <-chan struct{}, nWorkers int) {
 
 	<-stopCh
 	glog.Info("Stopping RunBindPods")
+}
+
+func StartAndWaitForPerfPort() string{
+	ln, err := net.Listen("tcp", ":1983")
+
+	if err!=nil{
+		glog.Fatal(" unable to start the server for perf",err)
+	}
+
+	conn,err:=ln.Accept()
+	defer conn.Close()
+	if err!=nil{
+		glog.Fatal("Unable to get the client connection", err)
+	}
+
+	msg,err:= bufio.NewReader(conn).ReadString('\n')
+
+	if err!=nil{
+		glog.Fatal("Ubanle to get the msg from perf client")
+	}
+
+	glog.Info("the api server address is ", string(msg))
+
+	return msg
 }
