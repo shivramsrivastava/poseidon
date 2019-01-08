@@ -111,9 +111,9 @@ func (nw *NodeWatcher) parseNode(node *v1.Node, phase NodePhase) *Node {
 	cpuCapQuantity := node.Status.Capacity[v1.ResourceCPU]
 	cpuAllocQuantity := node.Status.Allocatable[v1.ResourceCPU]
 	memCapQuantity := node.Status.Capacity[v1.ResourceMemory]
-	memCap, _ := memCapQuantity.AsInt64()
+	memCap := memCapQuantity.MilliValue()
 	memAllocQuantity := node.Status.Allocatable[v1.ResourceMemory]
-	memAlloc, _ := memAllocQuantity.AsInt64()
+	memAlloc := memAllocQuantity.MilliValue()
 	ephemeralCapQty := node.Status.Capacity[v1.ResourceEphemeralStorage]
 	ephemeralCap := ephemeralCapQty.MilliValue()
 	ephemeralAllocQty := node.Status.Allocatable[v1.ResourceEphemeralStorage]
@@ -126,10 +126,10 @@ func (nw *NodeWatcher) parseNode(node *v1.Node, phase NodePhase) *Node {
 		IsOutOfDisk:      isOutOfDisk,
 		CPUCapacity:      cpuCapQuantity.MilliValue(),
 		CPUAllocatable:   cpuAllocQuantity.MilliValue(),
-		MemCapacityKb:    memCap / bytesToKb,
-		MemAllocatableKb: memAlloc / bytesToKb,
-		EphemeralCapKb:   ephemeralCap / 1000,
-		EphemeralAllocKb: ephemeralAlloc / 1000,
+		MemCapacityKb:    memCap,
+		MemAllocatableKb: memAlloc,
+		EphemeralCapKb:   ephemeralCap,
+		EphemeralAllocKb: ephemeralAlloc,
 		PodAllocatable:   podAllocQuantity.Value(),
 		Labels:           node.Labels,
 		Annotations:      node.Annotations,
@@ -329,6 +329,16 @@ func (nw *NodeWatcher) createResourceTopologyForNode(node *Node) *firmament.Reso
 				RamCap:       uint64(node.MemCapacityKb),
 				CpuCores:     float32(node.CPUCapacity),
 				EphemeralCap: uint64(node.EphemeralCapKb),
+			},
+			AvailableResources: &firmament.ResourceVector{
+				RamCap:       uint64(node.MemAllocatableKb),
+				CpuCores:     float32(node.CPUAllocatable),
+				EphemeralCap: uint64(node.EphemeralAllocKb),
+			},
+			ReservedResources: &firmament.ResourceVector{
+				RamCap:       uint64(node.MemCapacityKb - node.MemAllocatableKb),
+				CpuCores:     float32(node.CPUCapacity - node.CPUAllocatable),
+				EphemeralCap: uint64(node.EphemeralCapKb - node.EphemeralAllocKb),
 			},
 			MaxPods: uint64(node.PodAllocatable),
 		},
